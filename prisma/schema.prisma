@@ -43,6 +43,22 @@ model DailyMetric {
   @@unique([studentId, sessionId])
 }
 
+// 2b. 评分历史存档（v0.5：更新前备份，追加不覆盖）
+model DailyMetricHistory {
+  id          String   @id @default(cuid())
+  metricId    String   // 原 DailyMetric.id
+  studentId   String
+  date        String
+  scoreA      Int
+  scoreB      Int
+  scoreC      Int
+  scoreD      Int
+  operator    String
+  sessionId   String?
+  archivedAt  DateTime @default(now())
+  changeType  String   // "update" | "delete"
+}
+
 // 3. 关键事件记录
 model Event {
   id          String   @id @default(cuid())

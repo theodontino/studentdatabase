@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { archiveMetricBeforeUpdate } from "@/lib/archive";
 
 // GET /api/review - list all drafts
 export async function GET(request: NextRequest) {
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
           where: { studentId: student.id, date: today, sessionId: null },
         });
         if (existing) {
+          await archiveMetricBeforeUpdate(existing.id);
           await prisma.dailyMetric.update({
             where: { id: existing.id },
             data: {

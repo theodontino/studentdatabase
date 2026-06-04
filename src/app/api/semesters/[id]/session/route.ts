@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { archiveMetricBeforeUpdate } from "@/lib/archive";
 
 // POST /api/semesters/[id]/session - create today's class session
 export async function POST(
@@ -171,6 +172,7 @@ async function recalculateScoreD(semesterId: string, date: string) {
       orderBy: { createdAt: "desc" },
     });
     if (latestMetric) {
+      await archiveMetricBeforeUpdate(latestMetric.id);
       await prisma.dailyMetric.update({ where: { id: latestMetric.id }, data: { scoreD } });
     } else {
       await prisma.dailyMetric.create({

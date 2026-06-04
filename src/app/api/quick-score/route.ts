@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { archiveMetricBeforeUpdate } from "@/lib/archive";
 
 // GET /api/quick-score?class=&date=&sessionCode= — get existing scores for a class/session
 export async function GET(request: NextRequest) {
@@ -163,6 +164,14 @@ export async function POST(request: NextRequest) {
       const b = Math.max(0, Math.min(5, entry.scoreB ?? 3));
       const c = Math.max(0, Math.min(5, entry.scoreC ?? 3));
 
+      // v0.5: archive existing before upsert
+      const existing = await prisma.dailyMetric.findUnique({
+        where: { studentId_sessionId: { studentId: entry.studentId, sessionId } },
+      });
+      if (existing) {
+        await archiveMetricBeforeUpdate(existing.id);
+      }
+
       await prisma.dailyMetric.upsert({
         where: { studentId_sessionId: { studentId: entry.studentId, sessionId } },
         create: { studentId: entry.studentId, date: entry.date, sessionId, scoreA: a, scoreB: b, scoreC: c },
@@ -205,6 +214,7 @@ export async function POST(request: NextRequest) {
               orderBy: { createdAt: "desc" },
             });
             if (latestMetric) {
+              await archiveMetricBeforeUpdate(latestMetric.id);
               await prisma.dailyMetric.update({ where: { id: latestMetric.id }, data: { scoreD } });
             } else {
               await prisma.dailyMetric.create({

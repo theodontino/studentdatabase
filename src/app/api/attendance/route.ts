@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { archiveMetricBeforeUpdate } from "@/lib/archive";
 
 // GET /api/attendance?sessionId=xxx - get attendance for a session
 export async function GET(request: NextRequest) {
@@ -81,6 +82,7 @@ export async function PUT(request: NextRequest) {
           orderBy: { createdAt: "desc" },
         });
         if (latestMetric) {
+          await archiveMetricBeforeUpdate(latestMetric.id);
           await prisma.dailyMetric.update({ where: { id: latestMetric.id }, data: { scoreD } });
         } else {
           await prisma.dailyMetric.create({
