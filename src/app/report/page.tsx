@@ -15,6 +15,8 @@ export default function ReportPage() {
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyReport, setDailyReport] = useState("");
   const [batchLoading, setBatchLoading] = useState(false);
+  const [batchCached, setBatchCached] = useState(false);
+  const [batchTotal, setBatchTotal] = useState(0);
 
   // Feedback
   const [selectedStudentId, setSelectedStudentId] = useState("");
@@ -52,6 +54,13 @@ export default function ReportPage() {
     finally { setDailyLoading(false); }
   }
 
+  // Reset cache when session changes
+  function onSessionChange(code: string) {
+    setSelectedSessionCode(code);
+    setBatchCached(false);
+    setBatchTotal(0);
+  }
+
   async function handleBatchFeedback() {
     if (!selectedSessionCode) return;
     setBatchLoading(true);
@@ -60,19 +69,24 @@ export default function ReportPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionCode: selectedSessionCode }),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      const arr = await res.arrayBuffer();
-      const blob = new Blob([arr], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `反馈_${selectedClass}_${selectedSessionCode}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      if (data.cached) {
+        setBatchCached(true);
+        setBatchTotal(data.total);
+      }
     } catch (e: any) { alert(e.message); }
     finally { setBatchLoading(false); }
+  }
+
+  function downloadBatchExcel() {
+    if (!selectedSessionCode) return;
+    const a = document.createElement("a");
+    a.href = `/api/report/feedback-batch?sessionCode=${selectedSessionCode}`;
+    a.download = `反馈_${selectedClass}_${selectedSessionCode}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   async function generateFeedback() {
@@ -121,7 +135,7 @@ export default function ReportPage() {
         <h3 className="text-lg font-semibold text-gray-800 mb-3">📰 班级日报</h3>
         {selectedClass && sessions.length > 0 && (
           <div className="flex items-center gap-3 mb-4">
-            <select value={selectedSessionCode} onChange={(e) => setSelectedSessionCode(e.target.value)}
+            <select value={selectedSessionCode} onChange={(e) => onSessionChange(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono outline-none">
               <option value="">选择课次</option>
               {sessions.map((s) => (
@@ -132,10 +146,17 @@ export default function ReportPage() {
               className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {dailyLoading ? "生成中..." : "生成日报"}
             </button>
-            <button onClick={handleBatchFeedback} disabled={batchLoading || !selectedSessionCode}
-              className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50">
-              {batchLoading ? "批量生成中..." : "批量反馈 → Excel"}
-            </button>
+            {!batchCached ? (
+              <button onClick={handleBatchFeedback} disabled={batchLoading || !selectedSessionCode}
+                className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50">
+                {batchLoading ? `生成中...（约${Math.ceil((batchTotal||25)*2)}秒）` : "批量反馈 → Excel"}
+              </button>
+            ) : (
+              <button onClick={downloadBatchExcel}
+                className="bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700">
+                📥 下载 Excel（{batchTotal}人，30分钟内有效）
+              </button>
+            )}
           </div>
         )}
         {!selectedClass && <p className="text-sm text-gray-400 mb-4">请先选择学期和班级</p>}
