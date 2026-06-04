@@ -136,7 +136,11 @@ export default function QuickScorePage() {
     setResult(null);
 
     try {
-      const res = await fetch(`/api/quick-score?class=${encodeURIComponent(cls)}&date=${session.date}`);
+      const params = new URLSearchParams({
+        class: cls,
+        sessionCode: session.code,
+      });
+      const res = await fetch(`/api/quick-score?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 

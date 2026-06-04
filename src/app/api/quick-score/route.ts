@@ -1,15 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/quick-score?class=&date= — get existing scores for a class on a date
+// GET /api/quick-score?class=&date=&sessionCode= — get existing scores for a class/session
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const className = searchParams.get("class");
     const date = searchParams.get("date");
+    const sessionCode = searchParams.get("sessionCode");
 
-    if (!className || !date) {
-      return NextResponse.json({ error: "缺少 class 或 date 参数" }, { status: 400 });
+    if (!className || (!date && !sessionCode)) {
+      return NextResponse.json({ error: "缺少 class 以及 date 或 sessionCode 参数" }, { status: 400 });
+    }
+
+    let targetDate = date;
+    let targetSession: {
+      id: string;
+      code: string;
+      semesterNumber: number;
+      date: string;
+      class: string | null;
+    } | null = null;
+
+    if (sessionCode) {
+      targetSession = await prisma.classSession.findUnique({
+        where: { code: sessionCode },
+        select: { id: true, code: true, semesterNumber: true, date: true, class: true },
+      });
+
+      if (!targetSession) {
+        return NextResponse.json({ error: "课次不存在" }, { status: 404 });
+      }
+
+      if (targetSession.class && targetSession.class !== className) {
+        return NextResponse.json({ error: "课次不属于当前班级" }, { status: 400 });
+      }
+
+      targetDate = targetSession.date;
+    }
+
+    if (!targetDate) {
+      return NextResponse.json({ error: "缺少日期" }, { status: 400 });
     }
 
     const students = await prisma.student.findMany({
@@ -19,20 +50,49 @@ export async function GET(request: NextRequest) {
 
     const studentIds = students.map((s) => s.id);
 
-    const metrics = await prisma.dailyMetric.findMany({
-      where: { studentId: { in: studentIds }, date },
-    });
+    // v0.4: query by sessionId (preferred) or by date+null-session (legacy)
+    const metrics = targetSession
+      ? await prisma.dailyMetric.findMany({
+          where: { studentId: { in: studentIds }, sessionId: targetSession.id },
+        })
+      : await prisma.dailyMetric.findMany({
+          where: { studentId: { in: studentIds }, date: targetDate, sessionId: null },
+        });
 
-    // Get attendance for sessions on this date (any class)
-    const sessions = await prisma.classSession.findMany({
-      where: { date },
-      select: { id: true, code: true, semesterNumber: true, class: true },
-    });
+    let sessions: {
+      id: string;
+      code: string;
+      semesterNumber: number;
+      date: string;
+      class: string | null;
+    }[] = [];
+    let attendanceSessionId = targetSession?.id;
 
-    const sessionIds = sessions.map((s) => s.id);
-    const attendances = sessionIds.length > 0
+    if (targetSession) {
+      sessions = [{
+        id: targetSession.id,
+        code: targetSession.code,
+        semesterNumber: targetSession.semesterNumber,
+        date: targetSession.date,
+        class: targetSession.class,
+      }];
+    } else {
+      sessions = await prisma.classSession.findMany({
+        where: { date: targetDate, class: className },
+        select: { id: true, code: true, semesterNumber: true, date: true, class: true },
+        orderBy: { code: "desc" },
+      });
+
+      // Date-only callers are ambiguous when a class has multiple sessions in one day.
+      // Only hydrate attendance when there is exactly one matching session.
+      if (sessions.length === 1) {
+        attendanceSessionId = sessions[0].id;
+      }
+    }
+
+    const attendances = attendanceSessionId
       ? await prisma.attendance.findMany({
-          where: { sessionId: { in: sessionIds }, studentId: { in: studentIds } },
+          where: { sessionId: attendanceSessionId, studentId: { in: studentIds } },
         })
       : [];
 
@@ -53,8 +113,9 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
-      date,
+      date: targetDate,
       className,
+      session: targetSession,
       sessions,
       scores: result,
     });
@@ -89,6 +150,13 @@ export async function POST(request: NextRequest) {
     let count = 0;
     const date = scores[0]?.date;
 
+    // v0.4: resolve sessionId for per-session upsert
+    let sessionId: string | null = null;
+    if (sessionCode) {
+      const session = await prisma.classSession.findUnique({ where: { code: sessionCode } });
+      sessionId = session?.id ?? null;
+    }
+
     for (const entry of scores) {
       if (!entry.studentId || !entry.date) continue;
       const a = Math.max(0, Math.min(5, entry.scoreA ?? 3));
@@ -96,8 +164,8 @@ export async function POST(request: NextRequest) {
       const c = Math.max(0, Math.min(5, entry.scoreC ?? 3));
 
       await prisma.dailyMetric.upsert({
-        where: { studentId_date: { studentId: entry.studentId, date: entry.date } },
-        create: { studentId: entry.studentId, date: entry.date, scoreA: a, scoreB: b, scoreC: c },
+        where: { studentId_sessionId: { studentId: entry.studentId, sessionId } },
+        create: { studentId: entry.studentId, date: entry.date, sessionId, scoreA: a, scoreB: b, scoreC: c },
         update: { scoreA: a, scoreB: b, scoreC: c },
       });
 
@@ -112,8 +180,8 @@ export async function POST(request: NextRequest) {
 
     // If sessionCode, sync attendance and recalculate D
     let attUpdated = 0;
-    if (sessionCode && date) {
-      const session = await prisma.classSession.findUnique({ where: { code: sessionCode } });
+    if (sessionId && date) {
+      const session = await prisma.classSession.findUnique({ where: { id: sessionId } });
       if (session && attendances && Array.isArray(attendances)) {
         for (const a of attendances) {
           await prisma.attendance.updateMany({
@@ -122,7 +190,7 @@ export async function POST(request: NextRequest) {
           });
           attUpdated++;
         }
-        // Recalculate D
+        // Recalculate scoreD (semester-level, sessionId=null)
         const totalSessions = await prisma.classSession.count({ where: { semesterId: session.semesterId } });
         if (totalSessions > 0) {
           const students = await prisma.student.findMany({ select: { id: true } });
@@ -131,11 +199,17 @@ export async function POST(request: NextRequest) {
               where: { studentId: s.id, present: true, session: { semesterId: session.semesterId } },
             });
             const scoreD = Math.round((5 * presentCount) / totalSessions);
-            await prisma.dailyMetric.upsert({
-              where: { studentId_date: { studentId: s.id, date } },
-              create: { studentId: s.id, date, scoreA: 0, scoreB: 0, scoreC: 0, scoreD },
-              update: { scoreD },
+            // v0.4: scoreD has no session, use findFirst+update/create
+            const existingD = await prisma.dailyMetric.findFirst({
+              where: { studentId: s.id, date, sessionId: null },
             });
+            if (existingD) {
+              await prisma.dailyMetric.update({ where: { id: existingD.id }, data: { scoreD } });
+            } else {
+              await prisma.dailyMetric.create({
+                data: { studentId: s.id, date, sessionId: null, scoreA: 0, scoreB: 0, scoreC: 0, scoreD },
+              });
+            }
           }
         }
       }

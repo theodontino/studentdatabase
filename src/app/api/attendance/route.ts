@@ -75,16 +75,17 @@ export async function PUT(request: NextRequest) {
           ? Math.round((5 * presentCount) / totalSessions)
           : 3;
 
-        // scoreD protection: only touch scoreD
-        await prisma.dailyMetric.upsert({
-          where: { studentId_date: { studentId: u.studentId, date: today } },
-          create: {
-            studentId: u.studentId,
-            date: today,
-            scoreA: 0, scoreB: 0, scoreC: 0, scoreD,
-          },
-          update: { scoreD },
+        // v0.4: scoreD has no session, use findFirst+update/create
+        const existingD = await prisma.dailyMetric.findFirst({
+          where: { studentId: u.studentId, date: today, sessionId: null },
         });
+        if (existingD) {
+          await prisma.dailyMetric.update({ where: { id: existingD.id }, data: { scoreD } });
+        } else {
+          await prisma.dailyMetric.create({
+            data: { studentId: u.studentId, date: today, sessionId: null, scoreA: 0, scoreB: 0, scoreC: 0, scoreD },
+          });
+        }
       }
     }
 

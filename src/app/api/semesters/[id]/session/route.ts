@@ -165,18 +165,16 @@ async function recalculateScoreD(semesterId: string, date: string) {
 
     const scoreD = Math.round((5 * presentCount) / totalSessions);
 
-    // scoreD protection: only touch scoreD, not A/B/C
-    await prisma.dailyMetric.upsert({
-      where: { studentId_date: { studentId: student.id, date } },
-      create: {
-        studentId: student.id,
-        date,
-        scoreA: 0,
-        scoreB: 0,
-        scoreC: 0,
-        scoreD,
-      },
-      update: { scoreD },
+    // v0.4: scoreD has no session, use findFirst+update/create
+    const existingD = await prisma.dailyMetric.findFirst({
+      where: { studentId: student.id, date, sessionId: null },
     });
+    if (existingD) {
+      await prisma.dailyMetric.update({ where: { id: existingD.id }, data: { scoreD } });
+    } else {
+      await prisma.dailyMetric.create({
+        data: { studentId: student.id, date, sessionId: null, scoreA: 0, scoreB: 0, scoreC: 0, scoreD },
+      });
+    }
   }
 }

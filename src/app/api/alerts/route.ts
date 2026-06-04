@@ -6,7 +6,7 @@ export async function GET() {
     // Get all students
     const students = await prisma.student.findMany({
       include: {
-        metrics: { orderBy: { date: "desc" }, take: 3 },
+        metrics: { orderBy: { createdAt: "desc" }, take: 3 },
       },
     });
 

@@ -65,28 +65,32 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Upsert DailyMetric (overwrite same date)
+      // v0.4: NL input has no session, use findFirst+update/create (sessionId=null)
       if (stu.scores && Object.values(stu.scores).some((v) => v !== null)) {
-        await prisma.dailyMetric.upsert({
-          where: {
-            studentId_date: {
+        const existing = await prisma.dailyMetric.findFirst({
+          where: { studentId: student.id, date: today, sessionId: null },
+        });
+        if (existing) {
+          await prisma.dailyMetric.update({
+            where: { id: existing.id },
+            data: {
+              scoreA: stu.scores.A ?? 3,
+              scoreB: stu.scores.B ?? 3,
+              scoreC: stu.scores.C ?? 3,
+            },
+          });
+        } else {
+          await prisma.dailyMetric.create({
+            data: {
               studentId: student.id,
               date: today,
+              sessionId: null,
+              scoreA: stu.scores.A ?? 3,
+              scoreB: stu.scores.B ?? 3,
+              scoreC: stu.scores.C ?? 3,
             },
-          },
-          create: {
-            studentId: student.id,
-            date: today,
-            scoreA: stu.scores.A ?? 3,
-            scoreB: stu.scores.B ?? 3,
-            scoreC: stu.scores.C ?? 3,
-          },
-          update: {
-            scoreA: stu.scores.A ?? 3,
-            scoreB: stu.scores.B ?? 3,
-            scoreC: stu.scores.C ?? 3,
-          },
-        });
+          });
+        }
       }
 
       // Create Events
