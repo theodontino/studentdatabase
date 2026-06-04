@@ -30,17 +30,18 @@ export default function ReviewPage() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<"pending" | "confirmed" | "rejected">("pending");
 
   // Editable state
   const [edits, setEdits] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    fetchDrafts();
-  }, []);
+    fetchDrafts(filterStatus);
+  }, [filterStatus]);
 
-  async function fetchDrafts() {
+  async function fetchDrafts(status: string) {
     try {
-      const res = await fetch("/api/review?status=pending");
+      const res = await fetch(`/api/review?status=${status}`);
       const data = await res.json();
       setDrafts(data);
     } catch (err) {
@@ -110,7 +111,7 @@ export default function ReviewPage() {
         throw new Error(data.error || "操作失败");
       }
 
-      fetchDrafts();
+      fetchDrafts(filterStatus);
       setExpandedId(null);
     } catch (err: any) {
       alert(err.message);
@@ -128,9 +129,26 @@ export default function ReviewPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold text-gray-800 mb-2">复核中心</h2>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm text-gray-500 mb-4">
         审核 LLM 生成的草案，确认后写入数据库。
       </p>
+
+      {/* v0.5: 状态筛选标签 */}
+      <div className="flex gap-2 mb-6">
+        {(["pending", "confirmed", "rejected"] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setFilterStatus(s)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              filterStatus === s
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            {s === "pending" ? "待复核" : s === "confirmed" ? "已确认" : "已放弃"}
+          </button>
+        ))}
+      </div>
 
       {loading && (
         <div className="text-center py-20 text-gray-400">
@@ -141,8 +159,12 @@ export default function ReviewPage() {
 
       {!loading && drafts.length === 0 && (
         <div className="text-center py-20 text-gray-400">
-          <p className="text-4xl mb-3">✅</p>
-          <p>没有待复核的记录</p>
+          <p className="text-4xl mb-3">{filterStatus === "pending" ? "✅" : "📭"}</p>
+          <p>
+            {filterStatus === "pending" ? "没有待复核的记录"
+              : filterStatus === "confirmed" ? "没有已确认的记录"
+              : "没有已放弃的记录"}
+          </p>
         </div>
       )}
 

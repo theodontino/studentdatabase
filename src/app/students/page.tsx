@@ -14,6 +14,12 @@ interface Student {
   updatedAt: string;
 }
 
+// v0.5: 预设标签库，教师可快速点选
+const PRESET_TAGS = [
+  "#逻辑强", "#基础弱", "#主动", "#被动", "#调皮",
+  "#敏感", "#内向", "#外向", "#注意力差", "#爱发言",
+];
+
 export default function StudentsPage() {
   const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
@@ -361,6 +367,23 @@ export default function StudentsPage() {
                   >
                     添加
                   </button>
+                </div>
+                {/* v0.5: 预设标签建议 */}
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {PRESET_TAGS.filter((t) => !form.labels.includes(t)).map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => {
+                        if (!form.labels.includes(tag)) {
+                          setForm({ ...form, labels: [...form.labels, tag] });
+                        }
+                      }}
+                      className="text-xs bg-gray-50 text-gray-500 px-2 py-0.5 rounded border border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                    >
+                      + {tag}
+                    </button>
+                  ))}
                 </div>
                 {form.labels.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
