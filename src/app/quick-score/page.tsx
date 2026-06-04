@@ -99,13 +99,13 @@ export default function QuickScorePage() {
       const data: SessionInfo[] = await res.json();
       setSessions(data);
 
-      // Auto-select today's session if it exists
       const today = new Date().toISOString().split("T")[0];
       const todaySession = data.find((s) => s.date === today);
-      if (todaySession) {
-        setSelectedSessionCode(todaySession.code);
-      } else if (data.length > 0) {
-        setSelectedSessionCode(data[0].code);
+      const target = todaySession || (data.length > 0 ? data[0] : null);
+
+      if (target) {
+        setSelectedSessionCode(target.code);
+        await loadSessionCards(target);
       } else {
         setSelectedSessionCode("");
         initBlankCards();
@@ -113,18 +113,18 @@ export default function QuickScorePage() {
     } catch (err) { console.error(err); }
   }
 
-  // --- When session code changes → load scores ---
-  useEffect(() => {
-    if (!selectedSessionCode) return;
-    loadSessionScores(selectedSessionCode);
-  }, [selectedSessionCode]);
-
-  async function loadSessionScores(code: string) {
+  // --- Session change handler (dropdown onChange) ---
+  async function handleSessionChange(code: string) {
+    setSelectedSessionCode(code);
+    if (!code) { setCards([]); return; }
     const session = sessions.find((s) => s.code === code);
-    if (!session) return;
+    if (session) await loadSessionCards(session);
+  }
+
+  // --- Core: load score cards for a session ---
+  async function loadSessionCards(session: SessionInfo) {
     setDate(session.date);
     setResult(null);
-
     try {
       const res = await fetch(`/api/quick-score?class=${encodeURIComponent(selectedClass)}&date=${session.date}`);
       const data = await res.json();
@@ -132,21 +132,19 @@ export default function QuickScorePage() {
 
       const students = allStudents.filter((s) => s.class === selectedClass);
       type ScoreItem = { studentId: string; scoreA: number; scoreB: number; scoreC: number; present: boolean };
-      const scoreMap = new Map((data.scores as ScoreItem[]).map((s) => [s.studentId, s] as const));
+      const scoreMap = new Map<string, ScoreItem>(
+        (data.scores as ScoreItem[]).map((s) => [s.studentId, s])
+      );
 
       setCards(students.map((s) => {
         const existing = scoreMap.get(s.id);
         return {
-          studentId: s.id,
-          studentName: s.name,
-          scoreA: existing?.scoreA ?? 3,
-          scoreB: existing?.scoreB ?? 3,
-          scoreC: existing?.scoreC ?? 3,
-          present: existing?.present ?? true,
-          note: "",
+          studentId: s.id, studentName: s.name,
+          scoreA: existing?.scoreA ?? 3, scoreB: existing?.scoreB ?? 3, scoreC: existing?.scoreC ?? 3,
+          present: existing?.present ?? true, note: "",
         };
       }));
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error("loadSessionCards error:", err); }
   }
 
   function initBlankCards() {
@@ -170,9 +168,7 @@ export default function QuickScorePage() {
       });
       const data = await res.json();
       if (!res.ok) { alert(data.error); return; }
-      // Refresh sessions + auto-select new one
-      await fetchSessions();
-      setSelectedSessionCode(data.code);
+      await fetchSessions(); // auto-selects + loads cards
     } catch (err: any) { alert(err.message); }
     finally { setRecordingClass(false); }
   }
@@ -229,8 +225,11 @@ export default function QuickScorePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setResult(data);
-      // Refresh to show updated scores
-      if (selectedSessionCode) loadSessionScores(selectedSessionCode);
+      // Refresh cards after submit
+      if (selectedSessionCode) {
+        const ses = sessions.find((s) => s.code === selectedSessionCode);
+        if (ses) await loadSessionCards(ses);
+      }
     } catch (err: any) { alert(err.message); }
     finally { setSubmitting(false); }
   }
@@ -298,7 +297,7 @@ export default function QuickScorePage() {
             <span className="text-xs text-gray-400">课次</span>
             <select
               value={selectedSessionCode}
-              onChange={(e) => setSelectedSessionCode(e.target.value)}
+              onChange={(e) => handleSessionChange(e.target.value)}
               className="border border-blue-300 rounded-lg px-3 py-2 text-sm font-mono outline-none bg-blue-50"
             >
               {sessions.map((s) => (
