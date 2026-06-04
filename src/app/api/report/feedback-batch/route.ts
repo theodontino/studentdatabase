@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// POST /api/report/feedback-batch — 批量生成（SSE 流式 + 后端缓存）
+// POST /api/report/feedback-batch — 批量生成（NDJSON 流式 + 后端缓存）
 export async function POST(request: NextRequest) {
   try {
     const { sessionCode } = await request.json();
@@ -52,6 +52,8 @@ export async function POST(request: NextRequest) {
       prisma.dailyMetric.findMany({ where: { sessionId: session.id, studentId: { in: students.map(s => s.id) } } }),
       prisma.attendance.findMany({ where: { sessionId: session.id, studentId: { in: students.map(s => s.id) } } }),
     ]);
+    // Events: date-based (no sessionId on Event model). On same-day multi-session,
+    // events from other sessions may appear. Prompt below constrains cross-referencing.
     const events = await prisma.event.findMany({ where: { date: session.date, studentId: { in: students.map(s => s.id) } } });
 
     const metricMap = new Map(metrics.map(m => [m.studentId, m]));
@@ -72,8 +74,8 @@ export async function POST(request: NextRequest) {
 
     const stream = new ReadableStream({
       async start(controller) {
-        // Send init with all student info
-        controller.enqueue(encoder.encode(`data:${JSON.stringify({ type: "init", students: studentCards, total })}\n\n`));
+        // Send init with all student info (NDJSON: one JSON per line)
+        controller.enqueue(encoder.encode(JSON.stringify({ type: "init", students: studentCards, total }) + "\n"));
 
         const results: { name: string; feedback: string }[] = [];
 
@@ -81,12 +83,19 @@ export async function POST(request: NextRequest) {
           const m = metricMap.get(s.id);
           const present = attMap.get(s.id);
           const evts = events.filter(e => e.studentId === s.id);
-          const ctx = `${s.name}在${session.date}第${session.semesterNumber}次课：学习A:${m?.scoreA??"—"} 纪律B:${m?.scoreB??"—"} 作业C:${m?.scoreC??"—"} 考勤D:${m?.scoreD??"—"} 出勤:${present===undefined?"无":present?"到":"缺"} 事件:${evts.map(e=>e.description).join("；")||"无"}`;
+          const eventText = evts.map(e => e.description).join("；") || "无";
+
+          const ctx =
+            `A:${m?.scoreA ?? "—"} B:${m?.scoreB ?? "—"} C:${m?.scoreC ?? "—"} D:${m?.scoreD ?? "—"} ` +
+            `出勤:${present === undefined ? "无" : present ? "到" : "缺"} ` +
+            (eventText !== "无" ? `事件:${eventText}` : "");
+
+          const prompt = `${s.name}，${session.date}第${session.semesterNumber}次课。${ctx}\n\n请为${s.name}生成50-80字家校反馈，只反馈该生本人表现，不比较、不提其他学生姓名。温和客观，直接返回。`;
 
           let feedback: string;
           try {
             const resp = await client.chat.completions.create({
-              model, messages: [{ role: "user", content: `${ctx}\n\n请为${s.name}生成50-80字反馈，温和客观，直接返回。` }],
+              model, messages: [{ role: "user", content: prompt }],
               temperature: 0.5, max_tokens: 256,
             });
             feedback = resp.choices[0]?.message?.content?.trim() || "";
@@ -94,8 +103,8 @@ export async function POST(request: NextRequest) {
 
           results.push({ name: s.name, feedback });
 
-          // Stream progress
-          controller.enqueue(encoder.encode(`data:${JSON.stringify({ type: "progress", studentId: s.id, feedback })}\n\n`));
+          // Stream progress (NDJSON: one JSON per line)
+          controller.enqueue(encoder.encode(JSON.stringify({ type: "progress", studentId: s.id, feedback }) + "\n"));
         }
 
         // Build Excel and cache
@@ -105,17 +114,16 @@ export async function POST(request: NextRequest) {
         const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
         cache.set(sessionCode, { buffer: new Uint8Array(buf), timestamp: Date.now(), total });
 
-        // Send done
-        controller.enqueue(encoder.encode(`data:${JSON.stringify({ type: "done", sessionCode, total, className })}\n\n`));
+        // Send done (NDJSON)
+        controller.enqueue(encoder.encode(JSON.stringify({ type: "done", sessionCode, total, className }) + "\n"));
         controller.close();
       }
     });
 
     return new Response(stream, {
       headers: {
-        "Content-Type": "text/event-stream",
+        "Content-Type": "application/x-ndjson",
         "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
       },
     });
   } catch (error) {

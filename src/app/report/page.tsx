@@ -102,7 +102,7 @@ export default function ReportPage() {
         return;
       }
 
-      // SSE stream
+      // NDJSON stream (one JSON per line)
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -115,30 +115,22 @@ export default function ReportPage() {
             buffer += decoder.decode(value, { stream: !done });
           }
 
-          if (done) {
-            // Flush decoder: finalize any pending multi-byte sequences
-            buffer += decoder.decode();
-            // Process remaining buffer (last SSE message)
-            if (buffer.trim()) {
-              const line = buffer.trim();
-              if (line.startsWith("data:")) {
-                try {
-                  handleSSEEvent(JSON.parse(line.slice(5)));
-                } catch { /* skip */ }
-              }
-            }
-            break;
+          // Process complete lines
+          let nlIdx: number;
+          while ((nlIdx = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, nlIdx);
+            buffer = buffer.slice(nlIdx + 1);
+            if (!line.trim()) continue;
+            try { handleEvent(JSON.parse(line)); } catch { /* skip */ }
           }
 
-          // Extract complete SSE messages (delimited by \n\n)
-          let idx: number;
-          while ((idx = buffer.indexOf("\n\n")) !== -1) {
-            const part = buffer.slice(0, idx);
-            buffer = buffer.slice(idx + 2);
-            if (!part.startsWith("data:")) continue;
-            try {
-              handleSSEEvent(JSON.parse(part.slice(5)));
-            } catch { /* skip */ }
+          if (done) {
+            // Flush decoder + process residual
+            buffer += decoder.decode();
+            if (buffer.trim()) {
+              try { handleEvent(JSON.parse(buffer.trim())); } catch { /* skip */ }
+            }
+            break;
           }
         }
       } finally {
@@ -152,7 +144,7 @@ export default function ReportPage() {
     }
   }
 
-  function handleSSEEvent(data: any) {
+  function handleEvent(data: any) {
     switch (data.type) {
       case "init":
         setBatchCards(data.students.map((s: any) => ({
