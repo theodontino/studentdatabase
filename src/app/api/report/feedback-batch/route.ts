@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createLLMClient, getLLMModel } from "@/lib/llm";
 import * as XLSX from "xlsx";
 
-// In-memory cache: sessionCode → { buffer, timestamp, total, done }
+// In-memory cache: sessionCode → { buffer, timestamp, total }
 const cache = new Map<string, { buffer: Uint8Array; timestamp: number; total: number }>();
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
 
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   return new NextResponse(cached.buffer, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="反馈_${code}.xlsx"`,
+      "Content-Disposition": `attachment; filename="feedback_${code}.xlsx"`,
     },
   });
 }
@@ -60,11 +60,7 @@ export async function POST(request: NextRequest) {
     const model = getLLMModel();
     const results: { name: string; feedback: string }[] = [];
 
-    // Generate per student, track progress
-    let done = 0;
     const total = students.length;
-    // Update cache progressively for polling
-    cache.set(sessionCode, { buffer: new Uint8Array(), timestamp: Date.now(), total });
 
     for (const s of students) {
       const m = metricMap.get(s.id);
@@ -78,9 +74,6 @@ export async function POST(request: NextRequest) {
         });
         results.push({ name: s.name, feedback: resp.choices[0]?.message?.content?.trim() || "" });
       } catch { results.push({ name: s.name, feedback: "[失败]" }); }
-      done++;
-      // Update progress
-      cache.set(sessionCode, { buffer: new Uint8Array(), timestamp: Date.now(), total });
     }
 
     // Build Excel and cache
