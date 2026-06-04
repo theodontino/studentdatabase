@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface Student {
   id: string;
@@ -64,6 +64,12 @@ export default function QuickScorePage() {
   const [showSemesterModal, setShowSemesterModal] = useState(false);
   const [semForm, setSemForm] = useState({ name: "", startDate: "", endDate: "" });
 
+  // Refs to avoid closure staleness in async callbacks
+  const selectedClassRef = useRef(selectedClass);
+  const allStudentsRef = useRef(allStudents);
+  selectedClassRef.current = selectedClass;
+  allStudentsRef.current = allStudents;
+
   // --- Init ---
   useEffect(() => { fetchData(); }, []);
 
@@ -121,16 +127,19 @@ export default function QuickScorePage() {
     if (session) await loadSessionCards(session);
   }
 
-  // --- Core: load score cards for a session ---
+  // --- Core: load score cards for a session (uses refs, not closures)
   async function loadSessionCards(session: SessionInfo) {
+    const cls = selectedClassRef.current;
+    const students = allStudentsRef.current.filter((s) => s.class === cls);
+
     setDate(session.date);
     setResult(null);
+
     try {
-      const res = await fetch(`/api/quick-score?class=${encodeURIComponent(selectedClass)}&date=${session.date}`);
+      const res = await fetch(`/api/quick-score?class=${encodeURIComponent(cls)}&date=${session.date}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      const students = allStudents.filter((s) => s.class === selectedClass);
       type ScoreItem = { studentId: string; scoreA: number; scoreB: number; scoreC: number; present: boolean };
       const scoreMap = new Map<string, ScoreItem>(
         (data.scores as ScoreItem[]).map((s) => [s.studentId, s])
