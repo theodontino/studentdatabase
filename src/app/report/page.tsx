@@ -17,6 +17,7 @@ export default function ReportPage() {
 
   // Feedback
   const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [feedbackSessionCode, setFeedbackSessionCode] = useState("");
   const [feedbackDays, setFeedbackDays] = useState(14);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
@@ -54,9 +55,15 @@ export default function ReportPage() {
     if (!selectedStudentId) return;
     setFeedbackLoading(true);
     try {
+      const body: any = { studentId: selectedStudentId };
+      if (feedbackSessionCode) {
+        body.sessionCode = feedbackSessionCode;
+      } else {
+        body.days = feedbackDays;
+      }
       const res = await fetch("/api/report/feedback", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId: selectedStudentId, days: feedbackDays }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -122,12 +129,23 @@ export default function ReportPage() {
               <option key={s.id} value={s.id}>{s.name} ({s.class})</option>
             ))}
           </select>
-          <select value={feedbackDays} onChange={(e) => setFeedbackDays(Number(e.target.value))}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none">
-            <option value={7}>近 7 天</option>
-            <option value={14}>近 14 天</option>
-            <option value={30}>近 30 天</option>
-          </select>
+          {selectedClass && sessions.length > 0 && (
+            <select value={feedbackSessionCode} onChange={(e) => { setFeedbackSessionCode(e.target.value); setFeedbackDays(14); }}
+              className="border border-blue-300 rounded-lg px-3 py-2 text-sm font-mono outline-none bg-blue-50">
+              <option value="">按课次（推荐）</option>
+              {sessions.map((s) => (
+                <option key={s.code} value={s.code}>{s.code} — 第{s.semesterNumber}次课</option>
+              ))}
+            </select>
+          )}
+          {!feedbackSessionCode && (
+            <select value={feedbackDays} onChange={(e) => setFeedbackDays(Number(e.target.value))}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none">
+              <option value={7}>近 7 天</option>
+              <option value={14}>近 14 天</option>
+              <option value={30}>近 30 天</option>
+            </select>
+          )}
           <button onClick={generateFeedback} disabled={feedbackLoading || !selectedStudentId}
             className="bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
             {feedbackLoading ? "生成中..." : "生成反馈"}
