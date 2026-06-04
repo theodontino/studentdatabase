@@ -61,6 +61,7 @@ export default function QuickScorePage() {
   const [recordingClass, setRecordingClass] = useState(false);
   const [deletingSession, setDeletingSession] = useState(false);
   const [result, setResult] = useState<{ count: number; attUpdated: number } | null>(null);
+  const [hasExistingScores, setHasExistingScores] = useState(false); // v0.6: score history warning
   const [showSemesterModal, setShowSemesterModal] = useState(false);
   const [semForm, setSemForm] = useState({ name: "", startDate: "", endDate: "" });
 
@@ -145,9 +146,14 @@ export default function QuickScorePage() {
       if (!res.ok) throw new Error(data.error);
 
       type ScoreItem = { studentId: string; scoreA: number; scoreB: number; scoreC: number; present: boolean };
-      const scoreMap = new Map<string, ScoreItem>(
-        (data.scores as ScoreItem[]).map((s) => [s.studentId, s])
-      );
+      const scoresData = data.scores as ScoreItem[];
+      const scoreMap = new Map<string, ScoreItem>(scoresData.map((s) => [s.studentId, s]));
+
+      // v0.6: warn if existing scores differ from defaults
+      const existingCount = scoresData.filter(
+        (s: ScoreItem) => s.scoreA !== 3 || s.scoreB !== 3 || s.scoreC !== 3
+      ).length;
+      setHasExistingScores(existingCount > 0);
 
       setCards(students.map((s) => {
         const existing = scoreMap.get(s.id);
@@ -348,6 +354,10 @@ export default function QuickScorePage() {
             {selectedSession.class && <span className="ml-1">· {selectedSession.class}</span>}
             <span className="ml-1">· 考勤 {selectedSession.attendanceCount} 人</span>
           </span>
+          {/* v0.6: existing score warning */}
+          {hasExistingScores && (
+            <span className="text-amber-600 text-xs font-medium">⚠ 已有评分记录，提交将覆盖</span>
+          )}
         </div>
       )}
 

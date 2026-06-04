@@ -22,6 +22,7 @@ export default function StudentDetailPage() {
   const id = params.id as string;
   const [student, setStudent] = useState<StudentDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [trendDays, setTrendDays] = useState(30); // v0.6: customizable range
 
   useEffect(() => { fetchStudent(); }, [id]);
 
@@ -59,13 +60,20 @@ export default function StudentDetailPage() {
     { dim: "考勤", score: latestMetric.scoreD ?? 3 },
   ] : [];
 
-  const trendData = [...student.metrics].reverse().map((m) => ({
-    date: m.date.slice(5),
-    "学习&测验": m.scoreA,
-    "精神&纪律": m.scoreB,
-    "课后任务": m.scoreC,
-    "考勤": m.scoreD ?? 3,
-  }));
+  const trendData = [...student.metrics]
+    .filter((m) => {
+      if (trendDays === 0) return true;
+      const daysAgo = (Date.now() - new Date(m.date).getTime()) / 86400000;
+      return daysAgo <= trendDays;
+    })
+    .reverse()
+    .map((m) => ({
+      date: m.date.slice(5),
+      "学习&测验": m.scoreA,
+      "精神&纪律": m.scoreB,
+      "课后任务": m.scoreC,
+      "考勤": m.scoreD ?? 3,
+    }));
 
   // Attendance summary
   const totalSessions = student.attendances?.length ?? 0;
@@ -117,7 +125,16 @@ export default function StudentDetailPage() {
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">30天趋势</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-700">趋势图</h3>
+            <select value={trendDays} onChange={(e) => setTrendDays(Number(e.target.value))}
+              className="text-xs border border-gray-300 rounded px-2 py-1 outline-none">
+              <option value={7}>近 7 天</option>
+              <option value={30}>近 30 天</option>
+              <option value={90}>近 90 天</option>
+              <option value={0}>全部</option>
+            </select>
+          </div>
           {trendData.length > 0 ? (
             <ResponsiveContainer width="100%" height={280}>
               <LineChart data={trendData}>

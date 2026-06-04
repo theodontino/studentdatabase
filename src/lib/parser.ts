@@ -21,13 +21,41 @@ interface ReviewResult {
   revised_events: Record<string, string[]>;
 }
 
+// v0.6: LLM call with retry (up to 2 retries on timeout/error)
+async function llmCall(
+  messages: { role: string; content: string }[],
+  temperature: number,
+  maxRetries = 2
+): Promise<string> {
+  const client = createLLMClient();
+  const model = getLLMModel();
+  let lastErr: any;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const resp = await client.chat.completions.create({
+        model, messages: messages as any, temperature, max_tokens: 16384,
+      });
+      const content = resp.choices[0]?.message?.content?.trim() || "";
+      if (resp.choices[0]?.finish_reason === "length") {
+        throw new Error("LLM response truncated (token limit)");
+      }
+      return content;
+    } catch (e: any) {
+      lastErr = e;
+      if (attempt < maxRetries) {
+        console.warn(`[llmCall] retry ${attempt + 1}/${maxRetries + 1}:`, e.message);
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+  }
+  throw lastErr || new Error("LLM failed after retries");
+}
+
 /**
  * Call LLM to parse teacher's natural language input
  */
 export async function parseInput(rawText: string, studentNames: string[]): Promise<ParseResult> {
-  const client = createLLMClient();
-  const model = getLLMModel();
-
   const userPrompt = `已知学生名单：${studentNames.join("、")}
 
 教师的输入文本：
@@ -35,68 +63,51 @@ ${rawText}
 
 请按照 System Prompt 的要求，分析文本并返回 JSON。`;
 
-  const response = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ],
-    temperature: 0.3,
-    max_tokens: 16384,
-  });
-
-  const choice = response.choices[0];
-  const content = choice?.message?.content?.trim() || "";
-  const finishReason = choice?.finish_reason;
-
-  if (finishReason === "length") {
-    console.error("[parseInput] LLM response truncated (finish_reason=length). Content preview:", content.slice(0, 500));
-    throw new Error("LLM response was truncated due to token limit");
-  }
-
+  const content = await llmCall([
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: userPrompt },
+  ], 0.3);
   return parseJSON(content, "parseInput") as ParseResult;
 }
 
 /**
+ * Call LLM to self-review the parsed result
+ */
+export async function reviewParsed(rawText: string, parsedResult: ParseResult): Promise<ReviewResult> {
+  const userPrompt = REVIEW_PROMPT
+    .replace("{rawText}", rawText)
+    .replace("{parsedResult}", JSON.stringify(parsedResult, null, 2));
+
+  const content = await llmCall([{ role: "user", content: userPrompt }], 0.2);
+  return parseJSON(content, "reviewParsed") as ReviewResult;
+}
+
+/**
  * v0.5: Fuzzy-match LLM-returned name to exact DB student name.
- * Handles common discrepancies: extra suffixes, partial names, character swaps.
  */
 export function fuzzyMatchName(llmName: string, candidates: string[]): string | null {
   const input = llmName.trim();
   if (!input || candidates.length === 0) return null;
 
-  // 1. Exact match
   if (candidates.includes(input)) return input;
-
-  // 2. Remove common suffixes and try again
   const noSuffix = input.replace(/同学|小朋友|老师/g, "").trim();
   if (noSuffix && candidates.includes(noSuffix)) return noSuffix;
 
-  // 3. Substring match (LLM name contained in DB name, or vice versa)
   for (const c of candidates) {
     if (c.includes(input) || input.includes(c)) return c;
     if (noSuffix && (c.includes(noSuffix) || noSuffix.includes(c))) return c;
   }
 
-  // 4. Character overlap ratio (for multi-char names)
-  let bestMatch: string | null = null;
-  let bestScore = 0;
+  let bestMatch: string | null = null, bestScore = 0;
   for (const c of candidates) {
     if (c.length < 2 || input.length < 2) continue;
     const overlap = [...input].filter((ch) => c.includes(ch)).length;
     const score = overlap / Math.max(input.length, c.length);
-    if (score > 0.6 && score > bestScore) {
-      bestScore = score;
-      bestMatch = c;
-    }
+    if (score > 0.6 && score > bestScore) { bestScore = score; bestMatch = c; }
   }
-
   return bestMatch;
 }
 
-/**
- * v0.5: Post-process parse result — correct student names using fuzzy match.
- */
 export function correctNames(result: ParseResult, studentNames: string[]): ParseResult {
   const corrected = result.students.map((stu) => {
     const match = fuzzyMatchName(stu.name, studentNames);
@@ -109,58 +120,15 @@ export function correctNames(result: ParseResult, studentNames: string[]): Parse
   return { ...result, students: corrected };
 }
 
-/**
- * Call LLM to self-review the parsed result
- */
-export async function reviewParsed(rawText: string, parsedResult: ParseResult): Promise<ReviewResult> {
-  const client = createLLMClient();
-  const model = getLLMModel();
-
-  const userPrompt = REVIEW_PROMPT
-    .replace("{rawText}", rawText)
-    .replace("{parsedResult}", JSON.stringify(parsedResult, null, 2));
-
-  const response = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: "user", content: userPrompt },
-    ],
-    temperature: 0.2,
-    max_tokens: 16384,
-  });
-
-  const choice = response.choices[0];
-  const content = choice?.message?.content?.trim() || "";
-  const finishReason = choice?.finish_reason;
-
-  if (finishReason === "length") {
-    console.error("[reviewParsed] LLM response truncated (finish_reason=length). Content preview:", content.slice(0, 500));
-    throw new Error("LLM review response was truncated due to token limit");
-  }
-
-  return parseJSON(content, "reviewParsed") as ReviewResult;
-}
-
-/**
- * Safely parse JSON from LLM response, stripping markdown code fences if present
- */
 function parseJSON(text: string, caller: string): object {
   let cleaned = text.trim();
-
-  if (!cleaned) {
-    throw new Error(`[${caller}] LLM returned empty response`);
-  }
-
-  // Remove markdown code fences if present
+  if (!cleaned) throw new Error(`[${caller}] LLM returned empty response`);
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/```\w*\n?/, "").replace(/\n?```$/, "");
   }
-
-  try {
-    return JSON.parse(cleaned);
-  } catch (parseError) {
+  try { return JSON.parse(cleaned); } catch (e) {
     const preview = cleaned.length > 500 ? cleaned.slice(0, 500) + "..." : cleaned;
-    console.error(`[${caller}] Failed to parse JSON. Content preview:\n${preview}`);
-    throw parseError;
+    console.error(`[${caller}] JSON parse failed:\n${preview}`);
+    throw e;
   }
 }
