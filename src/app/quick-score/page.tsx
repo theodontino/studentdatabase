@@ -17,6 +17,15 @@ interface Semester {
   sessionCount: number;
 }
 
+interface SessionInfo {
+  id: string;
+  code: string;
+  semesterNumber: number;
+  date: string;
+  class: string | null;
+  attendanceCount: number;
+}
+
 interface CardScore {
   studentId: string;
   studentName: string;
@@ -44,15 +53,18 @@ export default function QuickScorePage() {
   const [semesters, setSemesters] = useState<Semester[]>([]);
   const [selectedSemesterId, setSelectedSemesterId] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
+  const [selectedSessionCode, setSelectedSessionCode] = useState("");
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [cards, setCards] = useState<CardScore[]>([]);
-  const [todaySessionId, setTodaySessionId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [recordingClass, setRecordingClass] = useState(false);
-  const [result, setResult] = useState<{ count: number } | null>(null);
+  const [deletingSession, setDeletingSession] = useState(false);
+  const [result, setResult] = useState<{ count: number; attUpdated: number } | null>(null);
   const [showSemesterModal, setShowSemesterModal] = useState(false);
   const [semForm, setSemForm] = useState({ name: "", startDate: "", endDate: "" });
 
+  // --- Init ---
   useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
@@ -69,17 +81,84 @@ export default function QuickScorePage() {
     } catch (err) { console.error(err); }
   }
 
+  // --- When semester+class change → load sessions ---
   useEffect(() => {
-    if (!selectedClass) { setCards([]); return; }
+    if (!selectedSemesterId || !selectedClass) {
+      setSessions([]);
+      setSelectedSessionCode("");
+      setCards([]);
+      return;
+    }
+    fetchSessions();
+  }, [selectedSemesterId, selectedClass]);
+
+  async function fetchSessions() {
+    try {
+      const url = `/api/sessions?semesterId=${selectedSemesterId}&className=${encodeURIComponent(selectedClass)}`;
+      const res = await fetch(url);
+      const data: SessionInfo[] = await res.json();
+      setSessions(data);
+
+      // Auto-select today's session if it exists
+      const today = new Date().toISOString().split("T")[0];
+      const todaySession = data.find((s) => s.date === today);
+      if (todaySession) {
+        setSelectedSessionCode(todaySession.code);
+      } else if (data.length > 0) {
+        setSelectedSessionCode(data[0].code);
+      } else {
+        setSelectedSessionCode("");
+        initBlankCards();
+      }
+    } catch (err) { console.error(err); }
+  }
+
+  // --- When session code changes → load scores ---
+  useEffect(() => {
+    if (!selectedSessionCode) return;
+    loadSessionScores(selectedSessionCode);
+  }, [selectedSessionCode]);
+
+  async function loadSessionScores(code: string) {
+    const session = sessions.find((s) => s.code === code);
+    if (!session) return;
+    setDate(session.date);
+    setResult(null);
+
+    try {
+      const res = await fetch(`/api/quick-score?class=${encodeURIComponent(selectedClass)}&date=${session.date}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const students = allStudents.filter((s) => s.class === selectedClass);
+      type ScoreItem = { studentId: string; scoreA: number; scoreB: number; scoreC: number; present: boolean };
+      const scoreMap = new Map((data.scores as ScoreItem[]).map((s) => [s.studentId, s] as const));
+
+      setCards(students.map((s) => {
+        const existing = scoreMap.get(s.id);
+        return {
+          studentId: s.id,
+          studentName: s.name,
+          scoreA: existing?.scoreA ?? 3,
+          scoreB: existing?.scoreB ?? 3,
+          scoreC: existing?.scoreC ?? 3,
+          present: existing?.present ?? true,
+          note: "",
+        };
+      }));
+    } catch (err) { console.error(err); }
+  }
+
+  function initBlankCards() {
     const students = allStudents.filter((s) => s.class === selectedClass);
     setCards(students.map((s) => ({
       studentId: s.id, studentName: s.name,
       scoreA: 3, scoreB: 3, scoreC: 3,
       present: true, note: "",
     })));
-    setResult(null);
-  }, [selectedClass, allStudents]);
+  }
 
+  // --- Actions ---
   async function handleRecordClass() {
     if (!selectedSemesterId) return;
     setRecordingClass(true);
@@ -91,25 +170,27 @@ export default function QuickScorePage() {
       });
       const data = await res.json();
       if (!res.ok) { alert(data.error); return; }
-      setTodaySessionId(data.id);
-      await fetchData();
+      // Refresh sessions + auto-select new one
+      await fetchSessions();
+      setSelectedSessionCode(data.code);
     } catch (err: any) { alert(err.message); }
     finally { setRecordingClass(false); }
   }
 
-  async function createSemester() {
-    if (!semForm.name || !semForm.startDate || !semForm.endDate) return;
+  async function handleDeleteSession() {
+    if (!selectedSessionCode) return;
+    if (!confirm(`确定删除课次 ${selectedSessionCode}？\n这将同时删除所有考勤记录并重算分数。`)) return;
+    setDeletingSession(true);
     try {
-      const res = await fetch("/api/semesters", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(semForm),
-      });
-      if (!res.ok) throw new Error("创建失败");
-      setShowSemesterModal(false);
-      setSemForm({ name: "", startDate: "", endDate: "" });
-      await fetchData();
+      const res = await fetch(
+        `/api/semesters/${selectedSemesterId}/session?code=${selectedSessionCode}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (!res.ok) { alert(data.error); return; }
+      await fetchSessions();
     } catch (err: any) { alert(err.message); }
+    finally { setDeletingSession(false); }
   }
 
   function setScore(idx: number, dim: "A" | "B" | "C", value: number) {
@@ -131,30 +212,46 @@ export default function QuickScorePage() {
       scoreA: c.scoreA, scoreB: c.scoreB, scoreC: c.scoreC,
       note: c.note || undefined,
     }));
+    const attendances = cards.map(c => ({
+      studentId: c.studentId, present: c.present,
+    }));
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/quick-score", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scores: toSubmit }),
+        body: JSON.stringify({
+          scores: toSubmit,
+          sessionCode: selectedSessionCode || undefined,
+          attendances,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setResult(data);
-
-      // Update attendance if session exists
-      if (todaySessionId) {
-        const ups = cards.filter(c => !c.present).map(c => ({ studentId: c.studentId, present: false }));
-        if (ups.length > 0) {
-          await fetch("/api/attendance", {
-            method: "PUT", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId: todaySessionId, updates: ups }),
-          });
-        }
-      }
+      // Refresh to show updated scores
+      if (selectedSessionCode) loadSessionScores(selectedSessionCode);
     } catch (err: any) { alert(err.message); }
     finally { setSubmitting(false); }
   }
 
+  async function createSemester() {
+    if (!semForm.name || !semForm.startDate || !semForm.endDate) return;
+    try {
+      const res = await fetch("/api/semesters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(semForm),
+      });
+      if (!res.ok) throw new Error("创建失败");
+      setShowSemesterModal(false);
+      setSemForm({ name: "", startDate: "", endDate: "" });
+      await fetchData();
+    } catch (err: any) { alert(err.message); }
+  }
+
+  // --- Derived ---
+  const selectedSession = sessions.find((s) => s.code === selectedSessionCode);
   const changedCount = cards.filter(
     c => c.scoreA !== 3 || c.scoreB !== 3 || c.scoreC !== 3 || !c.present || c.note
   ).length;
@@ -163,7 +260,8 @@ export default function QuickScorePage() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">快速评分</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -171,33 +269,80 @@ export default function QuickScorePage() {
             {sem && <span className="text-gray-400 ml-2">| {sem.name} · 已上课 {sem.sessionCount} 次</span>}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <select value={selectedSemesterId} onChange={(e) => setSelectedSemesterId(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
-          >
-            {semesters.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
-          </select>
-          <button onClick={() => setShowSemesterModal(true)}
-            className="border border-gray-300 text-gray-500 px-2 py-2 rounded-lg text-sm hover:bg-gray-50"
-            title="新建学期"
-          >+</button>
-          <button onClick={handleRecordClass} disabled={recordingClass}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-          >{recordingClass ? "..." : "🔔 上课"}</button>
-          <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
-          >
-            <option value="">选择班级</option>
-            {classes.map((c) => (<option key={c} value={c}>{c}</option>))}
-          </select>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
-          />
-        </div>
       </div>
 
+      {/* Control Bar — Row 1: 学期 + 班级 + 课次 */}
+      <div className="flex items-center gap-3 mb-2 flex-wrap">
+        {/* Semester */}
+        <select value={selectedSemesterId} onChange={(e) => setSelectedSemesterId(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
+        >
+          {semesters.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+        </select>
+        <button onClick={() => setShowSemesterModal(true)}
+          className="border border-gray-300 text-gray-500 px-2 py-2 rounded-lg text-sm hover:bg-gray-50"
+          title="新建学期"
+        >+</button>
+
+        {/* Class */}
+        <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
+        >
+          <option value="">选择班级</option>
+          {classes.map((c) => (<option key={c} value={c}>{c}</option>))}
+        </select>
+
+        {/* Session selector */}
+        {selectedClass && sessions.length > 0 && (
+          <>
+            <span className="text-xs text-gray-400">课次</span>
+            <select
+              value={selectedSessionCode}
+              onChange={(e) => setSelectedSessionCode(e.target.value)}
+              className="border border-blue-300 rounded-lg px-3 py-2 text-sm font-mono outline-none bg-blue-50"
+            >
+              {sessions.map((s) => (
+                <option key={s.code} value={s.code}>
+                  {s.code} — 第{s.semesterNumber}次课
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+
+        {/* Actions */}
+        {selectedSessionCode && (
+          <button onClick={handleDeleteSession} disabled={deletingSession}
+            className="border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+            title="删除当前课次"
+          >{deletingSession ? "..." : "🗑"}</button>
+        )}
+
+        <button onClick={handleRecordClass} disabled={recordingClass || !selectedSemesterId || !selectedClass}
+          className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+        >{recordingClass ? "..." : "🔔 上课"}</button>
+      </div>
+
+      {/* Control Bar — Row 2: date + session info */}
+      {selectedSession && (
+        <div className="flex items-center gap-3 mb-4 text-xs text-gray-500">
+          <span>日期</span>
+          <input type="date" value={date}
+            onChange={(e) => { setDate(e.target.value); setSelectedSessionCode(""); }}
+            className="border border-gray-300 rounded px-2 py-1 text-xs outline-none"
+          />
+          <span className="text-gray-400">
+            学期内第 {selectedSession.semesterNumber} 次课
+            {selectedSession.class && <span className="ml-1">· {selectedSession.class}</span>}
+            <span className="ml-1">· 考勤 {selectedSession.attendanceCount} 人</span>
+          </span>
+        </div>
+      )}
+
+      {/* Score Cards */}
       {selectedClass && cards.length > 0 && (
         <>
+          {/* Batch controls */}
           <div className="bg-white border border-gray-200 rounded-lg p-3 mb-4 flex items-center gap-6 flex-wrap">
             <span className="text-xs font-medium text-gray-500 shrink-0">批量设置：</span>
             {DIM_CONFIG.map((dim) => (
@@ -221,6 +366,7 @@ export default function QuickScorePage() {
             </span>
           </div>
 
+          {/* Cards grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-6">
             {cards.map((card, idx) => {
               const student = allStudents.find(s => s.id === card.studentId);
@@ -281,9 +427,13 @@ export default function QuickScorePage() {
             })}
           </div>
 
+          {/* Bottom bar */}
           <div className="sticky bottom-0 bg-gray-50/95 backdrop-blur border-t border-gray-200 -mx-6 -mb-6 px-6 py-4 flex items-center justify-between">
             {result ? (
-              <div className="text-green-600 text-sm font-medium">✅ 已提交 {result.count} 条记录</div>
+              <div className="text-green-600 text-sm font-medium">
+                ✅ 已提交 {result.count} 条评分
+                {result.attUpdated > 0 && <span className="ml-1">· 更新 {result.attUpdated} 条考勤</span>}
+              </div>
             ) : (
               <div className="text-sm text-gray-500">
                 将提交 {cards.length} 名学生的评分
@@ -297,6 +447,7 @@ export default function QuickScorePage() {
         </>
       )}
 
+      {/* Empty states */}
       {selectedClass && cards.length === 0 && (
         <div className="text-center py-20 text-gray-400"><p className="text-4xl mb-3">📭</p><p>该班级暂无学生</p></div>
       )}
