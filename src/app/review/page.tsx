@@ -22,6 +22,7 @@ interface Draft {
     revised_events: Record<string, string[]>;
   } | null;
   status: string;
+  sessionCode?: string | null;  // v0.7
   createdAt: string;
 }
 
@@ -219,6 +220,9 @@ export default function ReviewPage() {
                       <span>
                         {draft.parsedResult.students.length} 名学生
                       </span>
+                      {draft.sessionCode && (
+                        <span className=\"text-blue-500 font-mono\">{draft.sessionCode}</span>
+                      )}
                       {draft.reviewResult && (
                         <span
                           className={
