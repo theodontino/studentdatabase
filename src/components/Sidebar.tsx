@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/quick-score", label: "快速评分", icon: "⚡" },
   { href: "/input", label: "NL 录入", icon: "✏️" },
   { href: "/review", label: "复核", icon: "✅" },
+  { href: "/report", label: "报告", icon: "📋" },
   { href: "/export", label: "导出", icon: "📥" },
 ];
 
