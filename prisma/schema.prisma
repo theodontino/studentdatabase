@@ -18,17 +18,17 @@ model Student {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  metrics         DailyMetric[]
+  sessionMetrics  SessionMetric[]
   events          Event[]
   communications  Communication[]
   attendances     Attendance[]
 }
 
-// 2. 每日四维评分（v0.4：唯一约束改为 student+session，每课次独立评分）
-model DailyMetric {
+// 2. 课次四维评分（每课次独立评分，sessionId 可空用于无课次场景）
+model SessionMetric {
   id        String   @id @default(cuid())
   studentId String
-  date      String   // YYYY-MM-DD
+  date      String   // YYYY-MM-DD，冗余字段（sessionId 可空时仍需直接绑定日期）
   scoreA    Int      // 0-5
   scoreB    Int      // 0-5
   scoreC    Int      // 0-5
@@ -43,10 +43,10 @@ model DailyMetric {
   @@unique([studentId, sessionId])
 }
 
-// 2b. 评分历史存档（v0.5：更新前备份，追加不覆盖）
-model DailyMetricHistory {
+// 2b. 评分历史存档（更新前备份，追加不覆盖）
+model SessionMetricHistory {
   id          String   @id @default(cuid())
-  metricId    String   // 原 DailyMetric.id
+  metricId    String   // 原 SessionMetric.id
   studentId   String
   date        String
   scoreA      Int
@@ -59,29 +59,31 @@ model DailyMetricHistory {
   changeType  String   // "update" | "delete"
 }
 
-// 3. 关键事件记录
+// 3. 关键事件记录（绑定课次，日期从 ClassSession.date 获取）
 model Event {
   id          String   @id @default(cuid())
   studentId   String
-  date        String   // YYYY-MM-DD
+  sessionId   String   // 关联课次（必填）
   type        String   // "课堂表现" | "测验成绩" | "心理状态" | "家校沟通"
   description String
   rawText     String   // 原始输入文本片段
   createdAt   DateTime @default(now())
 
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
-// 4. 家校沟通记录
+// 4. 家校沟通记录（绑定课次）
 model Communication {
   id          String   @id @default(cuid())
   studentId   String
-  date        String   // YYYY-MM-DD
+  sessionId   String   // 关联课次（必填）
   target      String   // 沟通对象，如 "父亲"、"母亲"
   summary     String   // 内容摘要
   createdAt   DateTime @default(now())
 
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 // 5. 待复核草案
@@ -116,9 +118,11 @@ model ClassSession {
   class          String?                   // 可空，班级名；null 表示全校
   createdAt      DateTime @default(now())
 
-  semester    Semester    @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  semester    Semester         @relation(fields: [semesterId], references: [id], onDelete: Cascade)
   attendances Attendance[]
-  metrics     DailyMetric[]
+  sessionMetrics SessionMetric[]
+  events         Event[]
+  communications  Communication[]
 }
 
 // 8. 考勤记录

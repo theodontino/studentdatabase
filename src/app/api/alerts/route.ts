@@ -6,14 +6,14 @@ export async function GET() {
     // Get all students
     const students = await prisma.student.findMany({
       include: {
-        metrics: { orderBy: { createdAt: "desc" }, take: 3 },
+        sessionMetrics: { orderBy: { createdAt: "desc" }, take: 3 },
       },
     });
 
     // Class overview: use latest metric per student (v0.4: avoid double-counting)
     const classMap: Record<string, { totalA: number; totalB: number; totalC: number; totalD: number; count: number }> = {};
     for (const student of students) {
-      const latest = student.metrics[0];
+      const latest = student.sessionMetrics[0];
       if (!latest) continue;
       const cls = student.class;
       if (!classMap[cls]) {
@@ -46,7 +46,7 @@ export async function GET() {
     }[] = [];
 
     for (const student of students) {
-      const metrics = student.metrics;
+      const metrics = student.sessionMetrics;
       if (metrics.length === 0) continue;
 
       const latest = metrics[0];

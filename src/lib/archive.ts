@@ -1,14 +1,14 @@
 import { prisma } from "./prisma";
 
 /**
- * v0.5: Archive current DailyMetric values to history before update.
- * Call this BEFORE updating a DailyMetric row.
+ * v0.5: Archive current SessionMetric values to history before update.
+ * Call this BEFORE updating a SessionMetric row.
  */
 export async function archiveMetricBeforeUpdate(metricId: string, changeType: "update" | "delete" = "update") {
-  const current = await prisma.dailyMetric.findUnique({ where: { id: metricId } });
+  const current = await prisma.sessionMetric.findUnique({ where: { id: metricId } });
   if (!current) return;
 
-  await prisma.dailyMetricHistory.create({
+  await prisma.sessionMetricHistory.create({
     data: {
       metricId: current.id,
       studentId: current.studentId,

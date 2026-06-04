@@ -53,10 +53,10 @@ export async function GET(request: NextRequest) {
 
     // v0.4: query by sessionId (preferred) or by date+null-session (legacy)
     const metrics = targetSession
-      ? await prisma.dailyMetric.findMany({
+      ? await prisma.sessionMetric.findMany({
           where: { studentId: { in: studentIds }, sessionId: targetSession.id },
         })
-      : await prisma.dailyMetric.findMany({
+      : await prisma.sessionMetric.findMany({
           where: { studentId: { in: studentIds }, date: targetDate, sessionId: null },
         });
 
@@ -166,33 +166,34 @@ export async function POST(request: NextRequest) {
 
       // v0.5: archive existing before upsert (handle null sessionId)
       if (sessionId) {
-        const existing = await prisma.dailyMetric.findUnique({
+        const existing = await prisma.sessionMetric.findUnique({
           where: { studentId_sessionId: { studentId: entry.studentId, sessionId } },
         });
         if (existing) await archiveMetricBeforeUpdate(existing.id);
-        await prisma.dailyMetric.upsert({
+        await prisma.sessionMetric.upsert({
           where: { studentId_sessionId: { studentId: entry.studentId, sessionId } },
           create: { studentId: entry.studentId, date: entry.date, sessionId, scoreA: a, scoreB: b, scoreC: c },
           update: { scoreA: a, scoreB: b, scoreC: c },
         });
       } else {
         // No session: findFirst + create/update (SQLite NULLs distinct in unique)
-        const existing = await prisma.dailyMetric.findFirst({
+        const existing = await prisma.sessionMetric.findFirst({
           where: { studentId: entry.studentId, date: entry.date, sessionId: null },
         });
         if (existing) {
           await archiveMetricBeforeUpdate(existing.id);
-          await prisma.dailyMetric.update({ where: { id: existing.id }, data: { scoreA: a, scoreB: b, scoreC: c } });
+          await prisma.sessionMetric.update({ where: { id: existing.id }, data: { scoreA: a, scoreB: b, scoreC: c } });
         } else {
-          await prisma.dailyMetric.create({
+          await prisma.sessionMetric.create({
             data: { studentId: entry.studentId, date: entry.date, sessionId: null, scoreA: a, scoreB: b, scoreC: c },
           });
         }
       }
 
-      if (entry.note && entry.note.trim()) {
+      // Create Event from note (only if sessionId available)
+      if (entry.note && entry.note.trim() && sessionId) {
         await prisma.event.create({
-          data: { studentId: entry.studentId, date: entry.date,
+          data: { studentId: entry.studentId, sessionId,
             type: "课堂表现", description: entry.note.trim(), rawText: entry.note.trim() },
         });
       }
@@ -221,15 +222,15 @@ export async function POST(request: NextRequest) {
             });
             const scoreD = Math.round((5 * presentCount) / totalSessions);
             // v0.4: update scoreD on student's latest metric (don't create A/B/C=0 rows)
-            const latestMetric = await prisma.dailyMetric.findFirst({
+            const latestMetric = await prisma.sessionMetric.findFirst({
               where: { studentId: s.id },
               orderBy: { createdAt: "desc" },
             });
             if (latestMetric) {
               await archiveMetricBeforeUpdate(latestMetric.id);
-              await prisma.dailyMetric.update({ where: { id: latestMetric.id }, data: { scoreD } });
+              await prisma.sessionMetric.update({ where: { id: latestMetric.id }, data: { scoreD } });
             } else {
-              await prisma.dailyMetric.create({
+              await prisma.sessionMetric.create({
                 data: { studentId: s.id, date, sessionId: null, scoreA: 3, scoreB: 3, scoreC: 3, scoreD },
               });
             }

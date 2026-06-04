@@ -77,15 +77,15 @@ export async function PUT(request: NextRequest) {
           : 3;
 
         // v0.4: update scoreD on student's latest metric (don't create A/B/C=0 rows)
-        const latestMetric = await prisma.dailyMetric.findFirst({
+        const latestMetric = await prisma.sessionMetric.findFirst({
           where: { studentId: u.studentId },
           orderBy: { createdAt: "desc" },
         });
         if (latestMetric) {
           await archiveMetricBeforeUpdate(latestMetric.id);
-          await prisma.dailyMetric.update({ where: { id: latestMetric.id }, data: { scoreD } });
+          await prisma.sessionMetric.update({ where: { id: latestMetric.id }, data: { scoreD } });
         } else {
-          await prisma.dailyMetric.create({
+          await prisma.sessionMetric.create({
             data: { studentId: u.studentId, date: today, sessionId: null, scoreA: 3, scoreB: 3, scoreC: 3, scoreD },
           });
         }

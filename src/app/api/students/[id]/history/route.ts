@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const history = await prisma.dailyMetricHistory.findMany({
+    const history = await prisma.sessionMetricHistory.findMany({
       where: { studentId: id },
       orderBy: { archivedAt: "desc" },
     });

@@ -49,12 +49,12 @@ export async function POST(request: NextRequest) {
     if (students.length === 0) return NextResponse.json({ error: "该班级无学生" }, { status: 404 });
 
     const [metrics, attendances] = await Promise.all([
-      prisma.dailyMetric.findMany({ where: { sessionId: session.id, studentId: { in: students.map(s => s.id) } } }),
+      prisma.sessionMetric.findMany({ where: { sessionId: session.id, studentId: { in: students.map(s => s.id) } } }),
       prisma.attendance.findMany({ where: { sessionId: session.id, studentId: { in: students.map(s => s.id) } } }),
     ]);
     // Events: date-based (no sessionId on Event model). On same-day multi-session,
     // events from other sessions may appear. Prompt below constrains cross-referencing.
-    const events = await prisma.event.findMany({ where: { date: session.date, studentId: { in: students.map(s => s.id) } } });
+    const events = await prisma.event.findMany({ where: { sessionId: session.id, studentId: { in: students.map(s => s.id) } } });
 
     const metricMap = new Map(metrics.map(m => [m.studentId, m]));
     const attMap = new Map(attendances.map(a => [a.studentId, a.present]));

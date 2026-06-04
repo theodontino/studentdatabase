@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     const studentIds = students.map((s) => s.id);
 
     const [metrics, attendances] = await Promise.all([
-      prisma.dailyMetric.findMany({
+      prisma.sessionMetric.findMany({
         where: { studentId: { in: studentIds }, sessionId: session.id },
       }),
       prisma.attendance.findMany({
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     ]);
 
     const events = await prisma.event.findMany({
-      where: { studentId: { in: studentIds }, date: session.date },
+      where: { studentId: { in: studentIds }, sessionId: session.id },
     });
 
     const metricMap = new Map(metrics.map((m) => [m.studentId, m]));

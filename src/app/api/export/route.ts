@@ -13,17 +13,19 @@ export async function POST(request: NextRequest) {
     // Fetch data
     const students = await prisma.student.findMany({
       include: {
-        metrics: {
+        sessionMetrics: {
           where: { date: { gte: startDate, lte: endDate } },
           orderBy: { date: "desc" },
         },
         events: {
-          where: { date: { gte: startDate, lte: endDate } },
-          orderBy: { date: "desc" },
+          where: { session: { date: { gte: startDate, lte: endDate } } },
+          include: { session: { select: { date: true, code: true } } },
+          orderBy: { createdAt: "desc" },
         },
         communications: {
-          where: { date: { gte: startDate, lte: endDate } },
-          orderBy: { date: "desc" },
+          where: { session: { date: { gte: startDate, lte: endDate } } },
+          include: { session: { select: { date: true, code: true } } },
+          orderBy: { createdAt: "desc" },
         },
         attendances: {
           where: { session: { date: { gte: startDate, lte: endDate } } },
@@ -40,15 +42,15 @@ export async function POST(request: NextRequest) {
       "学号": s.studentId,
       "性别": s.gender,
       "标签": JSON.parse(s.labels).join(", "),
-      "当前状态": s.metrics.length > 0
-        ? `A:${s.metrics[0].scoreA} B:${s.metrics[0].scoreB} C:${s.metrics[0].scoreC} D:${s.metrics[0].scoreD}`
+      "当前状态": s.sessionMetrics.length > 0
+        ? `A:${s.sessionMetrics[0].scoreA} B:${s.sessionMetrics[0].scoreB} C:${s.sessionMetrics[0].scoreC} D:${s.sessionMetrics[0].scoreD}`
         : "无记录",
     }));
 
     // Sheet 2: 每日指标历史
     const sheet2Data: any[] = [];
     for (const s of students) {
-      for (const m of s.metrics) {
+      for (const m of s.sessionMetrics) {
         sheet2Data.push({
           "日期": m.date,
           "学生ID": s.studentId,
@@ -67,12 +69,13 @@ export async function POST(request: NextRequest) {
     for (const s of students) {
       for (const e of s.events) {
         sheet3Data.push({
-          "日期": e.date,
+          "日期": e.session.date,
           "学生ID": s.studentId,
           "姓名": s.name,
           "事件类型": e.type,
           "事件描述": e.description,
           "原始文本": e.rawText,
+          "课次编码": e.session.code,
         });
       }
     }
@@ -82,11 +85,12 @@ export async function POST(request: NextRequest) {
     for (const s of students) {
       for (const c of s.communications) {
         sheet4Data.push({
-          "日期": c.date,
+          "日期": c.session.date,
           "学生ID": s.studentId,
           "姓名": s.name,
           "沟通对象": c.target,
           "内容摘要": c.summary,
+          "课次编码": c.session.code,
         });
       }
     }

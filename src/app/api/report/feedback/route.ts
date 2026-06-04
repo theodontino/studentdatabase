@@ -20,11 +20,11 @@ export async function POST(request: NextRequest) {
       if (!session) return NextResponse.json({ error: "课次不存在" }, { status: 404 });
 
       [metrics, attendances] = await Promise.all([
-        prisma.dailyMetric.findMany({ where: { studentId, sessionId: session.id } }),
+        prisma.sessionMetric.findMany({ where: { studentId, sessionId: session.id } }),
         prisma.attendance.findMany({ where: { sessionId: session.id, studentId } }),
       ]);
-      events = await prisma.event.findMany({ where: { studentId, date: session.date } });
-      comms = await prisma.communication.findMany({ where: { studentId, date: session.date } });
+      events = await prisma.event.findMany({ where: { studentId, sessionId: session.id } });
+      comms = await prisma.communication.findMany({ where: { studentId, sessionId: session.id } });
 
       const m = metrics[0];
       const att = attendances[0];
@@ -40,9 +40,9 @@ export async function POST(request: NextRequest) {
       const sinceStr = since.toISOString().split("T")[0];
 
       [metrics, events, comms, attendances] = await Promise.all([
-        prisma.dailyMetric.findMany({ where: { studentId, date: { gte: sinceStr } }, orderBy: { date: "desc" } }),
-        prisma.event.findMany({ where: { studentId, date: { gte: sinceStr } }, orderBy: { date: "desc" } }),
-        prisma.communication.findMany({ where: { studentId, date: { gte: sinceStr } }, orderBy: { date: "desc" } }),
+        prisma.sessionMetric.findMany({ where: { studentId, date: { gte: sinceStr } }, orderBy: { date: "desc" } }),
+        prisma.event.findMany({ where: { studentId, session: { date: { gte: sinceStr } } }, orderBy: { createdAt: "desc" }, include: { session: { select: { date: true } } } }),
+        prisma.communication.findMany({ where: { studentId, session: { date: { gte: sinceStr } } }, orderBy: { createdAt: "desc" }, include: { session: { select: { date: true } } } }),
         prisma.attendance.findMany({ where: { studentId, session: { date: { gte: sinceStr } } }, include: { session: { select: { date: true } } } }),
       ]);
 
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 - 学习(A): 均分${avgA} | 纪律(B): 均分${avgB} | 作业(C): 均分${avgC}
 - 考勤: ${total ? `${present}/${total}` : "无记录"}
 - 关键事件: ${events.map((e) => e.description).join("；") || "无"}
-- 家校沟通: ${comms.map((c) => `${c.date}与${c.target}:${c.summary}`).join("；") || "无"}`;
+- 家校沟通: ${comms.map((c) => `${c.session?.date ?? "—"}与${c.target}:${c.summary}`).join("；") || "无"}`;
     }
 
     const prompt = `你是高中班主任助手。请为以下学生生成一段100-150字的家长反馈文本。语气温和、客观、鼓励为主，适合直接发送。

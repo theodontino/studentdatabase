@@ -76,40 +76,40 @@ export async function POST(request: NextRequest) {
       // v0.7: write with sessionId if draft has sessionCode, else null
       if (stu.scores && Object.values(stu.scores).some((v) => v !== null)) {
         if (sessionId) {
-          const existing = await prisma.dailyMetric.findUnique({
+          const existing = await prisma.sessionMetric.findUnique({
             where: { studentId_sessionId: { studentId: student.id, sessionId } },
           });
           if (existing) await archiveMetricBeforeUpdate(existing.id);
-          await prisma.dailyMetric.upsert({
+          await prisma.sessionMetric.upsert({
             where: { studentId_sessionId: { studentId: student.id, sessionId } },
             create: { studentId: student.id, date: today, sessionId, scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3 },
             update: { scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3 },
           });
         } else {
-          const existing = await prisma.dailyMetric.findFirst({
+          const existing = await prisma.sessionMetric.findFirst({
             where: { studentId: student.id, date: today, sessionId: null },
           });
           if (existing) {
             await archiveMetricBeforeUpdate(existing.id);
-            await prisma.dailyMetric.update({
+            await prisma.sessionMetric.update({
               where: { id: existing.id },
               data: { scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3 },
             });
           } else {
-            await prisma.dailyMetric.create({
+            await prisma.sessionMetric.create({
               data: { studentId: student.id, date: today, sessionId: null, scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3 },
             });
           }
         }
       }
 
-      // Create Events
-      if (stu.events && stu.events.length > 0) {
+      // Create Events (only if sessionId available — binding to session required)
+      if (stu.events && stu.events.length > 0 && sessionId) {
         for (const eventDesc of stu.events) {
           await prisma.event.create({
             data: {
               studentId: student.id,
-              date: today,
+              sessionId,
               type: inferEventType(eventDesc),
               description: eventDesc,
               rawText: draft.rawText,
@@ -118,12 +118,12 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Create Communication
-      if (stu.communication) {
+      // Create Communication (only if sessionId available)
+      if (stu.communication && sessionId) {
         await prisma.communication.create({
           data: {
             studentId: student.id,
-            date: today,
+            sessionId,
             target: stu.communication.type.includes("家长") ? "家长" : stu.communication.type,
             summary: stu.communication.summary,
           },

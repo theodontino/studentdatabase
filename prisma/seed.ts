@@ -16,7 +16,7 @@ async function main() {
   await prisma.draftRecord.deleteMany();
   await prisma.event.deleteMany();
   await prisma.communication.deleteMany();
-  await prisma.dailyMetric.deleteMany();
+  await prisma.sessionMetric.deleteMany();
   await prisma.student.deleteMany();
 
   // Create students
@@ -50,76 +50,8 @@ async function main() {
     },
   });
 
-  // Create sample metrics for the past 7 days
+  // Create sample sessions and seed data (events/communications now bind to sessions)
   const today = new Date();
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split("T")[0];
-
-    await prisma.dailyMetric.create({
-      data: {
-        studentId: s1.id,
-        date: dateStr,
-        scoreA: Math.min(5, 4 + Math.floor(Math.random() * 2)),
-        scoreB: Math.min(5, 3 + Math.floor(Math.random() * 3)),
-        scoreC: Math.min(5, 3 + Math.floor(Math.random() * 3)),
-      },
-    });
-
-    await prisma.dailyMetric.create({
-      data: {
-        studentId: s2.id,
-        date: dateStr,
-        scoreA: Math.min(5, 2 + Math.floor(Math.random() * 3)),
-        scoreB: Math.min(5, 2 + Math.floor(Math.random() * 3)),
-        scoreC: Math.min(5, 3 + Math.floor(Math.random() * 2)),
-      },
-    });
-
-    await prisma.dailyMetric.create({
-      data: {
-        studentId: s3.id,
-        date: dateStr,
-        scoreA: Math.min(5, 3 + Math.floor(Math.random() * 3)),
-        scoreB: Math.min(5, 1 + Math.floor(Math.random() * 3)),
-        scoreC: Math.min(5, 2 + Math.floor(Math.random() * 3)),
-      },
-    });
-  }
-
-  // Create sample events
-  await prisma.event.create({
-    data: {
-      studentId: s1.id,
-      date: today.toISOString().split("T")[0],
-      type: "测验成绩",
-      description: "氧化还原反应测验全对",
-      rawText: "今天张三测验氧化还原全对",
-    },
-  });
-
-  await prisma.event.create({
-    data: {
-      studentId: s2.id,
-      date: today.toISOString().split("T")[0],
-      type: "心理状态",
-      description: "情绪低落，作业没交",
-      rawText: "李四作业没交，情绪低落",
-    },
-  });
-
-  // Create sample communication
-  await prisma.communication.create({
-    data: {
-      studentId: s2.id,
-      date: today.toISOString().split("T")[0],
-      target: "母亲",
-      summary: "电话沟通，确认李四近期因家庭事务分心，已与家长协商关注方案",
-    },
-  });
-
-  // Create semester and sessions
   const semester = await prisma.semester.create({
     data: {
       name: "2024-2025学年第一学期",
@@ -131,12 +63,13 @@ async function main() {
   const className = "高三(1)班";
 
   // Create 7 class sessions (past 7 days) with new code system
+  const sessions: any[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split("T")[0];
     const code = dateStr.replace(/-/g, "") + "01"; // e.g., "2026060401"
-    const sessionNum = 7 - i + 1; // session 1..7
+    const sessionNum = 7 - i + 1;
 
     const session = await prisma.classSession.create({
       data: {
@@ -147,19 +80,59 @@ async function main() {
         class: className,
       },
     });
+    sessions.push(session);
 
     // Default all students present, except 李四 absent on day 3 & 5
     for (const s of [s1, s2, s3]) {
       const absent = s.name === "李四" && (sessionNum === 3 || sessionNum === 5);
       await prisma.attendance.create({
-        data: {
-          sessionId: session.id,
-          studentId: s.id,
-          present: !absent,
-        },
+        data: { sessionId: session.id, studentId: s.id, present: !absent },
       });
     }
   }
+
+  // Create session metrics for past 7 days (using the last 7 sessions)
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i];
+    await prisma.sessionMetric.create({
+      data: { studentId: s1.id, date: session.date, sessionId: session.id,
+        scoreA: Math.min(5, 4 + Math.floor(Math.random() * 2)),
+        scoreB: Math.min(5, 3 + Math.floor(Math.random() * 3)),
+        scoreC: Math.min(5, 3 + Math.floor(Math.random() * 3)),
+      },
+    });
+    await prisma.sessionMetric.create({
+      data: { studentId: s2.id, date: session.date, sessionId: session.id,
+        scoreA: Math.min(5, 2 + Math.floor(Math.random() * 3)),
+        scoreB: Math.min(5, 2 + Math.floor(Math.random() * 3)),
+        scoreC: Math.min(5, 3 + Math.floor(Math.random() * 2)),
+      },
+    });
+    await prisma.sessionMetric.create({
+      data: { studentId: s3.id, date: session.date, sessionId: session.id,
+        scoreA: Math.min(5, 3 + Math.floor(Math.random() * 3)),
+        scoreB: Math.min(5, 1 + Math.floor(Math.random() * 3)),
+        scoreC: Math.min(5, 2 + Math.floor(Math.random() * 3)),
+      },
+    });
+  }
+
+  // Create sample events (bound to sessions)
+  const todaySession = sessions[sessions.length - 1];
+  await prisma.event.create({
+    data: { studentId: s1.id, sessionId: todaySession.id,
+      type: "测验成绩", description: "氧化还原反应测验全对", rawText: "今天张三测验氧化还原全对" },
+  });
+  await prisma.event.create({
+    data: { studentId: s2.id, sessionId: todaySession.id,
+      type: "心理状态", description: "情绪低落，作业没交", rawText: "李四作业没交，情绪低落" },
+  });
+
+  // Create sample communication (bound to session)
+  await prisma.communication.create({
+    data: { studentId: s2.id, sessionId: todaySession.id, target: "母亲",
+      summary: "电话沟通，确认李四近期因家庭事务分心，已与家长协商关注方案" },
+  });
 
   console.log("✅ Seed data created successfully!");
   console.log(`   Students: ${s1.name}, ${s2.name}, ${s3.name}`);

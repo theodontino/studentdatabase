@@ -10,9 +10,9 @@ import {
 interface StudentDetail {
   id: string; name: string; class: string; studentId: string;
   gender: string; labels: string[];
-  metrics: { id: string; date: string; scoreA: number; scoreB: number; scoreC: number; scoreD: number }[];
-  events: { id: string; date: string; type: string; description: string; rawText: string }[];
-  communications: { id: string; date: string; target: string; summary: string }[];
+  sessionMetrics: { id: string; date: string; scoreA: number; scoreB: number; scoreC: number; scoreD: number }[];
+  events: { id: string; session: { date: string; code: string; semesterNumber: number }; type: string; description: string; rawText: string }[];
+  communications: { id: string; session: { date: string; code: string }; target: string; summary: string }[];
   attendances?: { id: string; present: boolean; session: { date: string; semesterNumber: number; code: string } }[];
 }
 
@@ -52,7 +52,7 @@ export default function StudentDetailPage() {
     </div>
   );
 
-  const latestMetric = student.metrics[0];
+  const latestMetric = student.sessionMetrics[0];
   const radarData = latestMetric ? [
     { dim: "学习&测验", score: latestMetric.scoreA },
     { dim: "精神&纪律", score: latestMetric.scoreB },
@@ -60,7 +60,7 @@ export default function StudentDetailPage() {
     { dim: "考勤", score: latestMetric.scoreD ?? 3 },
   ] : [];
 
-  const trendData = [...student.metrics]
+  const trendData = [...student.sessionMetrics]
     .filter((m) => {
       if (trendDays === 0) return true;
       const daysAgo = (Date.now() - new Date(m.date).getTime()) / 86400000;
@@ -163,7 +163,7 @@ export default function StudentDetailPage() {
             <div className="space-y-3">
               {student.events.map((event) => (
                 <div key={event.id} className="flex gap-3 text-sm">
-                  <span className="text-xs text-gray-400 shrink-0 w-20">{event.date}</span>
+                  <span className="text-xs text-gray-400 shrink-0 w-20">{event.session.date}</span>
                   <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
                     event.type === "测验成绩" ? "bg-green-100 text-green-700" :
                     event.type === "心理状态" ? "bg-purple-100 text-purple-700" :
@@ -186,7 +186,7 @@ export default function StudentDetailPage() {
             <div className="space-y-3">
               {student.communications.map((comm) => (
                 <div key={comm.id} className="flex gap-3 text-sm">
-                  <span className="text-xs text-gray-400 shrink-0 w-20">{comm.date}</span>
+                  <span className="text-xs text-gray-400 shrink-0 w-20">{comm.session.date}</span>
                   <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded shrink-0">{comm.target}</span>
                   <p className="text-gray-700">{comm.summary}</p>
                 </div>
