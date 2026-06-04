@@ -221,7 +221,7 @@ export default function ReviewPage() {
                         {draft.parsedResult.students.length} 名学生
                       </span>
                       {draft.sessionCode && (
-                        <span className=\"text-blue-500 font-mono\">{draft.sessionCode}</span>
+                        <span className="text-blue-500 font-mono">{draft.sessionCode}</span>
                       )}
                       {draft.reviewResult && (
                         <span
