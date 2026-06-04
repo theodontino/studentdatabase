@@ -2,6 +2,13 @@
 
 import { useState, useEffect } from "react";
 
+interface StudentCard {
+  id: string;
+  name: string;
+  labels: string[];
+  feedback?: string;
+}
+
 export default function ReportPage() {
   const [semesters, setSemesters] = useState<{ id: string; name: string }[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
@@ -14,9 +21,13 @@ export default function ReportPage() {
   const [selectedSessionCode, setSelectedSessionCode] = useState("");
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyReport, setDailyReport] = useState("");
+
+  // Batch feedback
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchCached, setBatchCached] = useState(false);
   const [batchTotal, setBatchTotal] = useState(0);
+  const [batchCards, setBatchCards] = useState<StudentCard[]>([]);
+  const [batchDoneCount, setBatchDoneCount] = useState(0);
 
   // Feedback
   const [selectedStudentId, setSelectedStudentId] = useState("");
@@ -59,24 +70,88 @@ export default function ReportPage() {
     setSelectedSessionCode(code);
     setBatchCached(false);
     setBatchTotal(0);
+    setBatchCards([]);
+    setBatchDoneCount(0);
   }
 
   async function handleBatchFeedback() {
     if (!selectedSessionCode) return;
     setBatchLoading(true);
+    setBatchCached(false);
+    setBatchCards([]);
+    setBatchDoneCount(0);
+
     try {
       const res = await fetch("/api/report/feedback-batch", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionCode: selectedSessionCode }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      if (data.cached) {
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "请求失败");
+      }
+
+      // If cached, returns JSON directly (no SSE)
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const data = await res.json();
         setBatchCached(true);
         setBatchTotal(data.total);
+        setBatchLoading(false);
+        return;
       }
-    } catch (e: any) { alert(e.message); }
-    finally { setBatchLoading(false); }
+
+      // SSE stream
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Split on double newline (SSE message boundary)
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          try {
+            const json = JSON.parse(line.slice(5)); // after "data:"
+            handleSSEEvent(json);
+          } catch { /* skip malformed */ }
+        }
+      }
+
+      setBatchLoading(false);
+    } catch (e: any) {
+      alert(e.message);
+      setBatchLoading(false);
+    }
+  }
+
+  function handleSSEEvent(data: any) {
+    switch (data.type) {
+      case "init":
+        setBatchCards(data.students.map((s: any) => ({
+          id: s.id, name: s.name, labels: s.labels,
+        })));
+        setBatchTotal(data.total);
+        break;
+      case "progress":
+        setBatchCards(prev => prev.map(c =>
+          c.id === data.studentId ? { ...c, feedback: data.feedback } : c
+        ));
+        setBatchDoneCount(prev => prev + 1);
+        break;
+      case "done":
+        setBatchCached(true);
+        setBatchTotal(data.total);
+        break;
+    }
   }
 
   function downloadBatchExcel() {
@@ -110,8 +185,18 @@ export default function ReportPage() {
     finally { setFeedbackLoading(false); }
   }
 
+  const labelColors = [
+    "bg-blue-100 text-blue-700",
+    "bg-green-100 text-green-700",
+    "bg-purple-100 text-purple-700",
+    "bg-amber-100 text-amber-700",
+    "bg-pink-100 text-pink-700",
+    "bg-cyan-100 text-cyan-700",
+    "bg-red-100 text-red-700",
+  ];
+
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <h2 className="text-2xl font-bold text-gray-800 mb-2">报告生成</h2>
       <p className="text-sm text-gray-500 mb-6">AI 生成班级日报和家校反馈文本。</p>
 
@@ -146,12 +231,13 @@ export default function ReportPage() {
               className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {dailyLoading ? "生成中..." : "生成日报"}
             </button>
-            {!batchCached ? (
+            {!batchCached && (
               <button onClick={handleBatchFeedback} disabled={batchLoading || !selectedSessionCode}
                 className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50">
-                {batchLoading ? `生成中...（约${Math.ceil((batchTotal||25)*2)}秒）` : "批量反馈 → Excel"}
+                {batchLoading ? `生成中...（${batchDoneCount}/${batchTotal}）` : "批量反馈 → Excel"}
               </button>
-            ) : (
+            )}
+            {batchCached && (
               <button onClick={downloadBatchExcel}
                 className="bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700">
                 📥 下载 Excel（{batchTotal}人，30分钟内有效）
@@ -163,6 +249,70 @@ export default function ReportPage() {
         {dailyReport && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
             {dailyReport}
+          </div>
+        )}
+
+        {/* Student Feedback Cards Grid */}
+        {batchCards.length > 0 && (
+          <div className="mt-6">
+            <div className="flex items-center gap-2 mb-3">
+              <h4 className="text-sm font-semibold text-gray-700">
+                🏷️ 学生反馈标签卡
+              </h4>
+              {batchLoading && (
+                <span className="text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                  {batchDoneCount}/{batchTotal}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {batchCards.map((card) => (
+                <div
+                  key={card.id}
+                  className={`rounded-xl border p-3 transition-all duration-300 ${
+                    card.feedback
+                      ? "bg-white border-gray-200 shadow-sm"
+                      : "bg-gray-50 border-gray-200 animate-pulse"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                      {card.name.charAt(0)}
+                    </div>
+                    <span className="text-sm font-semibold text-gray-800 truncate">
+                      {card.name}
+                    </span>
+                  </div>
+
+                  {/* Labels */}
+                  {card.labels.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {card.labels.map((label, i) => (
+                        <span
+                          key={label}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            labelColors[i % labelColors.length]
+                          }`}
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Feedback */}
+                  {card.feedback ? (
+                    <p className="text-xs text-gray-600 leading-relaxed">
+                      {card.feedback}
+                    </p>
+                  ) : (
+                    <div className="text-xs text-gray-400 italic mt-1">
+                      等待生成...
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

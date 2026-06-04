@@ -25,13 +25,13 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// POST /api/report/feedback-batch — 批量生成（后端缓存）
+// POST /api/report/feedback-batch — 批量生成（SSE 流式 + 后端缓存）
 export async function POST(request: NextRequest) {
   try {
     const { sessionCode } = await request.json();
     if (!sessionCode) return NextResponse.json({ error: "缺少课次编码" }, { status: 400 });
 
-    // Check cache
+    // Check cache — if valid, return JSON (no need to re-stream)
     const cached = cache.get(sessionCode);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return NextResponse.json({ cached: true, total: cached.total, sessionCode });
@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
     if (!className) return NextResponse.json({ error: "该课次未关联班级" }, { status: 400 });
 
     const students = await prisma.student.findMany({
-      where: { class: className }, select: { id: true, name: true },
+      where: { class: className },
+      select: { id: true, name: true, labels: true },
     });
     if (students.length === 0) return NextResponse.json({ error: "该班级无学生" }, { status: 404 });
 
@@ -58,32 +59,65 @@ export async function POST(request: NextRequest) {
 
     const client = createLLMClient();
     const model = getLLMModel();
-    const results: { name: string; feedback: string }[] = [];
-
     const total = students.length;
 
-    for (const s of students) {
-      const m = metricMap.get(s.id);
-      const present = attMap.get(s.id);
-      const evts = events.filter(e => e.studentId === s.id);
-      const ctx = `${s.name}在${session.date}第${session.semesterNumber}次课：学习A:${m?.scoreA??"—"} 纪律B:${m?.scoreB??"—"} 作业C:${m?.scoreC??"—"} 考勤D:${m?.scoreD??"—"} 出勤:${present===undefined?"无":present?"到":"缺"} 事件:${evts.map(e=>e.description).join("；")||"无"}`;
-      try {
-        const resp = await client.chat.completions.create({
-          model, messages: [{ role: "user", content: `${ctx}\n\n请为${s.name}生成50-80字反馈，温和客观，直接返回。` }],
-          temperature: 0.5, max_tokens: 256,
-        });
-        results.push({ name: s.name, feedback: resp.choices[0]?.message?.content?.trim() || "" });
-      } catch { results.push({ name: s.name, feedback: "[失败]" }); }
-    }
+    const encoder = new TextEncoder();
 
-    // Build Excel and cache
-    const rows = results.map(r => ({ 姓名: r.name, 家校反馈: r.feedback }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "家校反馈");
-    const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-    cache.set(sessionCode, { buffer: new Uint8Array(buf), timestamp: Date.now(), total });
+    // Build init payload: all students with labels
+    const studentCards = students.map(s => ({
+      id: s.id,
+      name: s.name,
+      labels: JSON.parse(s.labels) as string[],
+    }));
 
-    return NextResponse.json({ cached: true, total, sessionCode, className });
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Send init with all student info
+        controller.enqueue(encoder.encode(`data:${JSON.stringify({ type: "init", students: studentCards, total })}\n\n`));
+
+        const results: { name: string; feedback: string }[] = [];
+
+        for (const s of students) {
+          const m = metricMap.get(s.id);
+          const present = attMap.get(s.id);
+          const evts = events.filter(e => e.studentId === s.id);
+          const ctx = `${s.name}在${session.date}第${session.semesterNumber}次课：学习A:${m?.scoreA??"—"} 纪律B:${m?.scoreB??"—"} 作业C:${m?.scoreC??"—"} 考勤D:${m?.scoreD??"—"} 出勤:${present===undefined?"无":present?"到":"缺"} 事件:${evts.map(e=>e.description).join("；")||"无"}`;
+
+          let feedback: string;
+          try {
+            const resp = await client.chat.completions.create({
+              model, messages: [{ role: "user", content: `${ctx}\n\n请为${s.name}生成50-80字反馈，温和客观，直接返回。` }],
+              temperature: 0.5, max_tokens: 256,
+            });
+            feedback = resp.choices[0]?.message?.content?.trim() || "";
+          } catch { feedback = "[失败]"; }
+
+          results.push({ name: s.name, feedback });
+
+          // Stream progress
+          controller.enqueue(encoder.encode(`data:${JSON.stringify({ type: "progress", studentId: s.id, feedback })}\n\n`));
+        }
+
+        // Build Excel and cache
+        const rows = results.map(r => ({ 姓名: r.name, 家校反馈: r.feedback }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "家校反馈");
+        const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+        cache.set(sessionCode, { buffer: new Uint8Array(buf), timestamp: Date.now(), total });
+
+        // Send done
+        controller.enqueue(encoder.encode(`data:${JSON.stringify({ type: "done", sessionCode, total, className })}\n\n`));
+        controller.close();
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
   } catch (error) {
     console.error("POST /api/report/feedback-batch error:", error);
     return NextResponse.json({ error: "批量生成失败" }, { status: 500 });
