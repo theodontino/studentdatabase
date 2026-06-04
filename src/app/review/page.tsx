@@ -126,6 +126,25 @@ export default function ReviewPage() {
     C: "课后任务",
   };
 
+  /** v0.5.1: Get review info for a specific student */
+  function studentReview(draft: Draft, studentName: string) {
+    if (!draft.reviewResult) return null;
+    const revisedScores = draft.reviewResult.revised_scores?.[studentName];
+    const revisedEvents = draft.reviewResult.revised_events?.[studentName];
+    if (!revisedScores && !revisedEvents) return null;
+    return { revisedScores, revisedEvents };
+  }
+
+  /** Count students with review issues */
+  function reviewedStudentCount(draft: Draft): number {
+    if (!draft.reviewResult) return 0;
+    const names = new Set([
+      ...Object.keys(draft.reviewResult.revised_scores || {}),
+      ...Object.keys(draft.reviewResult.revised_events || {}),
+    ]);
+    return names.size;
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold text-gray-800 mb-2">复核中心</h2>
@@ -205,13 +224,16 @@ export default function ReviewPage() {
                           className={
                             draft.reviewResult.is_valid
                               ? "text-green-500"
-                              : "text-amber-500"
+                              : `text-amber-500 font-medium`
                           }
                         >
                           {draft.reviewResult.is_valid
-                            ? "LLM 自审通过"
-                            : `${draft.reviewResult.issues.length} 个问题`}
+                            ? "✓ 自审通过"
+                            : `⚠ ${draft.reviewResult.issues.length} 个问题 · ${reviewedStudentCount(draft)} 名学生需关注`}
                         </span>
+                      )}
+                      {!draft.reviewResult && (
+                        <span className="text-gray-400">无自审结果</span>
                       )}
                     </div>
                   </div>
@@ -224,90 +246,94 @@ export default function ReviewPage() {
               {/* Expanded Content */}
               {isExpanded && (
                 <div className="border-t border-gray-100 p-4 bg-gray-50">
-                  {/* LLM Review */}
+                  {/* v0.5.1: Compact self-review overview */}
                   {draft.reviewResult && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-                      <h4 className="text-sm font-semibold text-amber-800 mb-1">
-                        🤖 LLM 自审意见
-                      </h4>
+                    <div className={`rounded-lg p-3 mb-4 ${
+                      draft.reviewResult.is_valid
+                        ? "bg-green-50 border border-green-200"
+                        : "bg-amber-50 border border-amber-200"
+                    }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-semibold">
+                          {draft.reviewResult.is_valid ? "✅" : "⚠️"} 自审总览
+                        </span>
+                        {!draft.reviewResult.is_valid && (
+                          <span className="text-xs text-amber-600">
+                            {draft.reviewResult.issues.length} 问题 · {draft.reviewResult.suggestions.length} 建议 · {reviewedStudentCount(draft)} 名学生需关注
+                          </span>
+                        )}
+                      </div>
                       {draft.reviewResult.issues.length > 0 && (
-                        <ul className="list-disc list-inside text-xs text-amber-700">
-                          {draft.reviewResult.issues.map((issue, i) => (
-                            <li key={i}>{issue}</li>
-                          ))}
-                        </ul>
-                      )}
-                      {draft.reviewResult.suggestions.length > 0 && (
-                        <ul className="list-disc list-inside text-xs text-amber-700 mt-1">
-                          {draft.reviewResult.suggestions.map((s, i) => (
-                            <li key={i}>💡 {s}</li>
-                          ))}
-                        </ul>
+                        <details className="mt-1">
+                          <summary className="text-xs text-amber-700 cursor-pointer hover:text-amber-800">查看详情</summary>
+                          <ul className="list-disc list-inside text-xs text-amber-700 mt-1 space-y-0.5">
+                            {draft.reviewResult.issues.map((issue, i) => (<li key={i}>{issue}</li>))}
+                            {draft.reviewResult.suggestions.map((s, i) => (<li key={`s${i}`}>💡 {s}</li>))}
+                          </ul>
+                        </details>
                       )}
                     </div>
                   )}
 
-                  {/* Editable Students */}
-                  {currentData.students.map((stu: any, si: number) => (
-                    <div
-                      key={si}
-                      className="bg-white border border-gray-200 rounded-lg p-4 mb-3"
-                    >
-                      <h5 className="font-semibold text-gray-800 mb-3">
-                        👤 {stu.name}
-                      </h5>
-
-                      {/* Editable Scores */}
-                      <div className="grid grid-cols-3 gap-3 mb-3">
-                        {(["A", "B", "C"] as const).map((dim) => (
-                          <div key={dim}>
-                            <label className="text-xs text-gray-500 block mb-1">
-                              {dimLabel[dim]}
-                            </label>
-                            <select
-                              value={stu.scores[dim] ?? ""}
-                              onChange={(e) =>
-                                updateScore(
-                                  draft.id,
-                                  si,
-                                  dim,
-                                  e.target.value === ""
-                                    ? null!
-                                    : Number(e.target.value)
-                                )
-                              }
-                              className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-                            >
-                              <option value="">未提及</option>
-                              {[0, 1, 2, 3, 4, 5].map((n) => (
-                                <option key={n} value={n}>
-                                  {n} 分
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        ))}
+                  {/* Student Cards with review highlights */}
+                  {currentData.students.map((stu: any, si: number) => {
+                    const review = studentReview(draft, stu.name);
+                    const hasIssue = review !== null;
+                    return (
+                    <div key={si} className={`bg-white border rounded-lg p-4 mb-3 transition-colors ${
+                      hasIssue ? "border-amber-300 bg-amber-50/30 shadow-sm" : "border-gray-200"
+                    }`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <h5 className="font-semibold text-gray-800">👤 {stu.name}</h5>
+                        {hasIssue && <span className="text-xs bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-medium">⚠ 需关注</span>}
                       </div>
 
-                      {/* Editable Events */}
+                      {/* Review suggestions for this specific student */}
+                      {review && (
+                        <div className="bg-amber-50 border border-amber-100 rounded p-2 mb-3">
+                          {review.revisedScores && (
+                            <div className="text-xs text-amber-700 mb-1">
+                              💡 建议调整：
+                              {Object.entries(review.revisedScores).filter(([, v]) => v != null).map(([dim, val]) => (
+                                <span key={dim} className="font-mono font-medium ml-1">{dimLabel[dim]||dim}→{val}分</span>
+                              ))}
+                            </div>
+                          )}
+                          {review.revisedEvents?.length > 0 && (
+                            <div className="text-xs text-amber-700">📝 建议事件：{review.revisedEvents.join("、")}</div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Scores */}
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        {(["A","B","C"] as const).map((dim) => {
+                          const suggested = review?.revisedScores?.[dim];
+                          return (
+                          <div key={dim}>
+                            <label className={`text-xs block mb-1 ${suggested!=null?"text-amber-600 font-medium":"text-gray-500"}`}>
+                              {dimLabel[dim]}{suggested!=null?` →${suggested}`:""}
+                            </label>
+                            <select value={stu.scores[dim]??""} onChange={(e)=>updateScore(draft.id,si,dim,e.target.value===""?null!:Number(e.target.value))}
+                              className={`w-full border rounded px-2 py-1.5 text-sm ${suggested!=null?"border-amber-300 bg-amber-50":"border-gray-300"}`}>
+                              <option value="">未提及</option>
+                              {[0,1,2,3,4,5].map(n=><option key={n} value={n}>{n}分</option>)}
+                            </select>
+                          </div>);
+                        })}
+                      </div>
+
+                      {/* Events */}
                       <div>
                         <span className="text-xs text-gray-500">事件：</span>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {stu.events?.map((event: string, ei: number) => (
-                            <span
-                              key={ei}
-                              className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded"
-                            >
-                              {event}
-                              <button
-                                onClick={() =>
-                                  removeEvent(draft.id, si, ei)
-                                }
-                                className="hover:text-red-500"
-                              >
-                                ×
-                              </button>
-                            </span>
+                          {stu.events?.map((event:string,ei:number)=>{
+                            const isRevised=review?.revisedEvents?.includes(event);
+                            return (<span key={ei} className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded ${isRevised?"bg-amber-100 text-amber-700 border border-amber-200":"bg-blue-50 text-blue-700"}`}>
+                              {event}<button onClick={()=>removeEvent(draft.id,si,ei)} className="hover:text-red-500">×</button></span>);
+                          })}
+                          {review?.revisedEvents?.filter((ev:string)=>!stu.events?.includes(ev)).map((ev:string,i:number)=>(
+                            <span key={`new${i}`} className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded">+ {ev}</span>
                           ))}
                         </div>
                       </div>
@@ -315,42 +341,28 @@ export default function ReviewPage() {
                       {/* Communication */}
                       {stu.communication && (
                         <div className="bg-purple-50 rounded p-2 mt-2">
-                          <span className="text-xs font-medium text-purple-700">
-                            📞 家校沟通
-                          </span>
-                          <p className="text-xs text-purple-600 mt-0.5">
-                            {stu.communication.summary}
-                          </p>
+                          <span className="text-xs font-medium text-purple-700">📞 家校沟通</span>
+                          <p className="text-xs text-purple-600 mt-0.5">{stu.communication.summary}</p>
                         </div>
                       )}
-                    </div>
-                  ))}
+                    </div>);
+                  })}
 
                   {/* Alert */}
                   {currentData.alert_suggestion && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-                      <span className="text-xs font-semibold text-red-700">
-                        🚨 {currentData.alert_suggestion}
-                      </span>
+                      <span className="text-xs font-semibold text-red-700">🚨 {currentData.alert_suggestion}</span>
                     </div>
                   )}
 
                   {/* Action Buttons */}
                   <div className="flex gap-3">
-                    <button
-                      onClick={() => handleAction(draft.id, "reject")}
-                      disabled={isProcessing}
-                      className="flex-1 py-2.5 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-100 disabled:opacity-50"
-                    >
-                      {isProcessing ? "处理中..." : "✕ 放弃"}
-                    </button>
-                    <button
-                      onClick={() => handleAction(draft.id, "confirm")}
-                      disabled={isProcessing}
-                      className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-                    >
-                      {isProcessing ? "处理中..." : "✓ 确认写入"}
-                    </button>
+                    <button onClick={()=>handleAction(draft.id,"reject")} disabled={isProcessing}
+                      className="flex-1 py-2.5 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-100 disabled:opacity-50">
+                      {isProcessing?"处理中...":"✕ 放弃"}</button>
+                    <button onClick={()=>handleAction(draft.id,"confirm")} disabled={isProcessing}
+                      className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                      {isProcessing?"处理中...":"✓ 确认写入"}</button>
                   </div>
                 </div>
               )}
