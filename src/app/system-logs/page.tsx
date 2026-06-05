@@ -49,6 +49,10 @@ export default function SystemLogsPage() {
 
     const res = await fetch(`/api/system/logs?${params}`);
     const data = await res.json();
+    if (!res.ok || !data.logs) {
+      setLoading(false);
+      return;
+    }
     if (reset) {
       setLogs(data.logs);
       setOffset(LIMIT);
@@ -56,7 +60,7 @@ export default function SystemLogsPage() {
       setLogs([...logs, ...data.logs]);
       setOffset(o + LIMIT);
     }
-    setTotal(data.total);
+    setTotal(data.total ?? 0);
     setLoading(false);
   }
 

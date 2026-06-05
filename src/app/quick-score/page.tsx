@@ -68,6 +68,7 @@ export default function QuickScorePage() {
   // Refs to avoid closure staleness in async callbacks
   const selectedClassRef = useRef(selectedClass);
   const allStudentsRef = useRef(allStudents);
+  const originalScoresRef = useRef<Map<string, { scoreA: number; scoreB: number; scoreC: number; present: boolean }>>(new Map());
   selectedClassRef.current = selectedClass;
   allStudentsRef.current = allStudents;
 
@@ -148,6 +149,9 @@ export default function QuickScorePage() {
       type ScoreItem = { studentId: string; scoreA: number; scoreB: number; scoreC: number; present: boolean };
       const scoresData = data.scores as ScoreItem[];
       const scoreMap = new Map<string, ScoreItem>(scoresData.map((s) => [s.studentId, s]));
+      originalScoresRef.current = new Map(
+        scoresData.map(s => [s.studentId, { scoreA: s.scoreA, scoreB: s.scoreB, scoreC: s.scoreC, present: s.present }] as const)
+      );
 
       // v0.6: warn if existing scores differ from defaults
       const existingCount = scoresData.filter(
@@ -222,12 +226,25 @@ export default function QuickScorePage() {
   }
 
   async function handleSubmit() {
-    const toSubmit = cards.map(c => ({
+    const originals = originalScoresRef.current;
+    const changedCards = cards.filter(c => {
+      const orig = originals.get(c.studentId);
+      if (!orig) {
+        // New card — submit if anything differs from default
+        return c.scoreA !== 3 || c.scoreB !== 3 || c.scoreC !== 3 || !c.present || c.note;
+      }
+      return c.scoreA !== orig.scoreA || c.scoreB !== orig.scoreB || c.scoreC !== orig.scoreC
+          || c.present !== orig.present || !!c.note;
+    });
+
+    if (changedCards.length === 0) { alert("没有改动，无需提交"); return; }
+
+    const toSubmit = changedCards.map(c => ({
       studentId: c.studentId, date,
       scoreA: c.scoreA, scoreB: c.scoreB, scoreC: c.scoreC,
       note: c.note || undefined,
     }));
-    const attendances = cards.map(c => ({
+    const attendances = changedCards.map(c => ({
       studentId: c.studentId, present: c.present,
     }));
 
@@ -270,9 +287,12 @@ export default function QuickScorePage() {
 
   // --- Derived ---
   const selectedSession = sessions.find((s) => s.code === selectedSessionCode);
-  const changedCount = cards.filter(
-    c => c.scoreA !== 3 || c.scoreB !== 3 || c.scoreC !== 3 || !c.present || c.note
-  ).length;
+  const changedCount = cards.filter(c => {
+    const orig = originalScoresRef.current.get(c.studentId);
+    if (!orig) return c.scoreA !== 3 || c.scoreB !== 3 || c.scoreC !== 3 || !c.present || c.note;
+    return c.scoreA !== orig.scoreA || c.scoreB !== orig.scoreB || c.scoreC !== orig.scoreC
+        || c.present !== orig.present || !!c.note;
+  }).length;
   const absentCount = cards.filter(c => !c.present).length;
   const sem = semesters.find(s => s.id === selectedSemesterId);
 
