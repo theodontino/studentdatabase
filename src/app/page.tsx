@@ -121,9 +121,9 @@ export default function DashboardPage() {
             </span>
           </h3>
           <div className="space-y-2">
-            {data.classAlerts.map((ca, idx) => (
+            {data.classAlerts.map((ca) => (
               <div
-                key={idx}
+                key={ca.className + ca.dimension}
                 className={`flex items-center gap-3 p-3 rounded-lg ${
                   ca.severity === "red"
                     ? "bg-red-50 border border-red-200"
@@ -155,9 +155,9 @@ export default function DashboardPage() {
             </span>
           </h3>
           <div className="space-y-2">
-            {data.studentAlerts.map((sa, idx) => (
+            {data.studentAlerts.map((sa) => (
               <div
-                key={idx}
+                key={sa.studentId + sa.dimension}
                 onClick={() => router.push(`/students/${sa.studentId}`)}
                 className={`flex items-center gap-4 p-4 rounded-lg cursor-pointer hover:shadow-sm transition-shadow ${
                   sa.severity === "red"
