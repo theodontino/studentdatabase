@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { archiveMetricBeforeUpdate } from "@/lib/archive";
+import { logAction } from "@/lib/logger";
 
 // POST /api/semesters/[id]/session - create today's class session
 export async function POST(
@@ -76,6 +77,15 @@ export async function POST(
 
     await recalculateScoreD(semesterId, today);
 
+    // v0.11: log session creation
+    logAction({
+      action: "session.created",
+      targetType: "Session",
+      targetId: session.id,
+      targetName: code,
+      detail: { date: today, class: classCode, studentCount: students.length },
+    });
+
     return NextResponse.json(
       { ...session, studentCount: students.length },
       { status: 201 }
@@ -106,6 +116,15 @@ export async function DELETE(
     }
 
     const today = new Date().toISOString().split("T")[0];
+
+    // v0.11: log session deletion
+    logAction({
+      action: "session.deleted",
+      targetType: "Session",
+      targetId: session.id,
+      targetName: code,
+      detail: { date: session.date, semesterNumber: session.semesterNumber },
+    });
 
     await prisma.classSession.delete({ where: { code } });
     await reorderSemesterNumbers(semesterId);

@@ -261,7 +261,16 @@ export default function DashboardPage() {
 
       {/* 系统操作 */}
       <div className="mt-10 pt-6 border-t border-gray-200">
-        <ArchiveButton onSuccess={fetchData} />
+        <div className="flex items-center justify-between mb-4">
+          <ArchiveButton onSuccess={fetchData} />
+          <a href="/system-logs"
+            className="text-xs text-gray-400 hover:text-blue-600 transition-colors">
+            📋 操作日志
+          </a>
+        </div>
+        <p className="text-xs text-gray-300 mt-2">
+          定期运行 <code className="bg-gray-100 px-1 rounded">npm run db:maintain</code> 保持数据库健康
+        </p>
       </div>
     </div>
   );

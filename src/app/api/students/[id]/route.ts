@@ -1,19 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAction } from "@/lib/logger";
 
 // GET /api/students/[id] - get student with metrics, events, communications
+// v0.11: events/communications 支持分页参数 ?eventLimit=20&eventOffset=0&commLimit=20&commOffset=0
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+    const url = new URL(request.url);
+    const eventLimit = Math.min(parseInt(url.searchParams.get("eventLimit") || "20"), 100);
+    const eventOffset = parseInt(url.searchParams.get("eventOffset") || "0");
+    const commLimit = Math.min(parseInt(url.searchParams.get("commLimit") || "20"), 100);
+    const commOffset = parseInt(url.searchParams.get("commOffset") || "0");
+
+    // Fetch one extra to determine hasMore
+    const [events, communications] = await Promise.all([
+      prisma.event.findMany({
+        where: { studentId: id },
+        include: { session: { select: { date: true, code: true, semesterNumber: true } } },
+        orderBy: { createdAt: "desc" },
+        take: eventLimit + 1,
+        skip: eventOffset,
+      }),
+      prisma.communication.findMany({
+        where: { studentId: id },
+        include: { session: { select: { date: true, code: true } } },
+        orderBy: { createdAt: "desc" },
+        take: commLimit + 1,
+        skip: commOffset,
+      }),
+    ]);
+
     const student = await prisma.student.findUnique({
       where: { id },
       include: {
         sessionMetrics: { orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 365 },
-        events: { include: { session: { select: { date: true, code: true, semesterNumber: true } } }, orderBy: { createdAt: "desc" } },
-        communications: { include: { session: { select: { date: true, code: true } } }, orderBy: { createdAt: "desc" } },
         class: { select: { id: true, code: true, name: true } },
       },
     });
@@ -26,6 +50,12 @@ export async function GET(
       ...student,
       class: student.class?.name ?? student.class?.code ?? "",
       labels: JSON.parse(student.labels),
+      events: events.slice(0, eventLimit),
+      communications: communications.slice(0, commLimit),
+      _pagination: {
+        eventHasMore: events.length > eventLimit,
+        commHasMore: communications.length > commLimit,
+      },
     });
   } catch (error) {
     console.error("GET /api/students/[id] error:", error);
@@ -90,7 +120,18 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    // v0.11: fetch name before delete for logging
+    const student = await prisma.student.findUnique({ where: { id }, select: { name: true, studentId: true } });
     await prisma.student.delete({ where: { id } });
+    if (student) {
+      logAction({
+        action: "student.deleted",
+        targetType: "Student",
+        targetId: id,
+        targetName: student.name,
+        detail: { studentId: student.studentId },
+      });
+    }
     return NextResponse.json({ success: true });
   } catch (error: any) {
     if (error?.code === "P2025") {

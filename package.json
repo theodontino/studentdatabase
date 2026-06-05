@@ -10,6 +10,7 @@
     "db:seed": "npx tsx prisma/seed.ts",
     "db:reset": "npx prisma migrate reset --force && npm run db:seed",
     "db:archive": "npx tsx scripts/archive-and-reset.ts",
+    "db:maintain": "npx tsx scripts/db-maintain.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -31,8 +32,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/supertest": "^7.2.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
+    "supertest": "^7.2.2",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5",

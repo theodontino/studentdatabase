@@ -140,6 +140,17 @@ model ClassSession {
   communications  Communication[]
 }
 
+// 9. 系统操作日志（v0.11）
+model SystemLog {
+  id         String   @id @default(cuid())
+  action     String   // "score.updated" | "alert.triggered" | "student.deleted" | "session.created" | "session.deleted" | "data.exported"
+  targetType String   // "Student" | "Session" | "Draft" | "Class" | "System"
+  targetId   String?  // 关联实体 id
+  targetName String?  // 冗余：便于前端不 join 就能展示
+  detail     String   @default("{}") // JSON，存储变更前后值等详情
+  createdAt  DateTime @default(now())
+}
+
 // 8. 考勤记录
 model Attendance {
   id        String   @id @default(cuid())

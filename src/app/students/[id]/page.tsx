@@ -14,7 +14,10 @@ interface StudentDetail {
   events: { id: string; session: { date: string; code: string; semesterNumber: number }; type: string; description: string; rawText: string }[];
   communications: { id: string; session: { date: string; code: string }; target: string; summary: string }[];
   attendances?: { id: string; present: boolean; session: { date: string; semesterNumber: number; code: string } }[];
+  _pagination?: { eventHasMore: boolean; commHasMore: boolean };
 }
+
+const PAGE_SIZE = 20;
 
 export default function StudentDetailPage() {
   const params = useParams();
@@ -22,22 +25,56 @@ export default function StudentDetailPage() {
   const id = params.id as string;
   const [student, setStudent] = useState<StudentDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [trendDays, setTrendDays] = useState(30); // v0.6: customizable range
+  const [trendDays, setTrendDays] = useState(30);
+  const [eventOffset, setEventOffset] = useState(0);
+  const [commOffset, setCommOffset] = useState(0);
+  const [eventHasMore, setEventHasMore] = useState(false);
+  const [commHasMore, setCommHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState<"events" | "comms" | null>(null);
 
   useEffect(() => { fetchStudent(); }, [id]);
 
   async function fetchStudent() {
     try {
-      const res = await fetch(`/api/students/${id}`);
+      const res = await fetch(`/api/students/${id}?eventLimit=${PAGE_SIZE}&eventOffset=0&commLimit=${PAGE_SIZE}&commOffset=0`);
       if (!res.ok) throw new Error("学生不存在");
       const data = await res.json();
+      setEventHasMore(data._pagination?.eventHasMore ?? false);
+      setCommHasMore(data._pagination?.commHasMore ?? false);
+      setEventOffset(0);
+      setCommOffset(0);
 
-      // Fetch attendance separately
       const attRes = await fetch(`/api/attendance?studentId=${id}`);
       const attData = attRes.ok ? await attRes.json() : [];
       setStudent({ ...data, attendances: attData });
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
+  }
+
+  async function loadMoreEvents() {
+    const nextOffset = eventOffset + PAGE_SIZE;
+    setLoadingMore("events");
+    const res = await fetch(`/api/students/${id}?eventLimit=${PAGE_SIZE}&eventOffset=${nextOffset}&commLimit=0&commOffset=0`);
+    const data = await res.json();
+    if (student) {
+      setStudent({ ...student, events: [...student.events, ...data.events] });
+      setEventHasMore(data._pagination?.eventHasMore ?? false);
+      setEventOffset(nextOffset);
+    }
+    setLoadingMore(null);
+  }
+
+  async function loadMoreCommunications() {
+    const nextOffset = commOffset + PAGE_SIZE;
+    setLoadingMore("comms");
+    const res = await fetch(`/api/students/${id}?eventLimit=0&eventOffset=0&commLimit=${PAGE_SIZE}&commOffset=${nextOffset}`);
+    const data = await res.json();
+    if (student) {
+      setStudent({ ...student, communications: [...student.communications, ...data.communications] });
+      setCommHasMore(data._pagination?.commHasMore ?? false);
+      setCommOffset(nextOffset);
+    }
+    setLoadingMore(null);
   }
 
   if (loading) return (
@@ -178,6 +215,12 @@ export default function StudentDetailPage() {
               ))}
             </div>
           ) : <p className="text-sm text-gray-400 text-center py-8">暂无事件</p>}
+          {eventHasMore && (
+            <button onClick={loadMoreEvents} disabled={loadingMore === "events"}
+              className="mt-3 w-full text-center text-sm text-blue-600 hover:text-blue-800 py-1.5 rounded hover:bg-blue-50 disabled:opacity-50">
+              {loadingMore === "events" ? "加载中..." : `加载更多事件`}
+            </button>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -193,6 +236,12 @@ export default function StudentDetailPage() {
               ))}
             </div>
           ) : <p className="text-sm text-gray-400 text-center py-8">暂无记录</p>}
+          {commHasMore && (
+            <button onClick={loadMoreCommunications} disabled={loadingMore === "comms"}
+              className="mt-3 w-full text-center text-sm text-blue-600 hover:text-blue-800 py-1.5 rounded hover:bg-blue-50 disabled:opacity-50">
+              {loadingMore === "comms" ? "加载中..." : `加载更多沟通记录`}
+            </button>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-5">

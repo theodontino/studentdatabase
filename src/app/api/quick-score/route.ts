@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { archiveMetricBeforeUpdate } from "@/lib/archive";
+import { logAction } from "@/lib/logger";
 
 // GET /api/quick-score?class=&date=&sessionCode= — get existing scores for a class/session
 export async function GET(request: NextRequest) {
@@ -185,6 +186,13 @@ export async function POST(request: NextRequest) {
         });
       }
       count++;
+      // v0.11: log score update
+      logAction({
+        action: "score.updated",
+        targetType: "Student",
+        targetId: entry.studentId,
+        detail: { scoreA: a, scoreB: b, scoreC: c, operator: "quick-score", sessionCode },
+      });
     }
 
     // Attendance + D recalc

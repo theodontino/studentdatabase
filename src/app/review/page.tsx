@@ -298,7 +298,7 @@ export default function ReviewPage() {
                           {review.revisedScores && (
                             <div className="text-xs text-amber-700 mb-1">
                               💡 建议调整：
-                              {Object.entries(review.revisedScores).filter(([, v]) => v != null).map(([dim, val]) => (
+                              {Object.entries(review.revisedScores as Record<string,number|null>).filter(([, v]) => v != null).map(([dim, val]) => (
                                 <span key={dim} className="font-mono font-medium ml-1">{dimLabel[dim]||dim}→{val}分</span>
                               ))}
                             </div>

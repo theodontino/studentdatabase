@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { archiveMetricBeforeUpdate } from "@/lib/archive";
+import { logAction } from "@/lib/logger";
 
 // GET /api/review - list all drafts
 export async function GET(request: NextRequest) {
@@ -127,6 +128,16 @@ export async function POST(request: NextRequest) {
             target: stu.communication.type.includes("家长") ? "家长" : stu.communication.type,
             summary: stu.communication.summary,
           },
+        });
+      }
+      // v0.11: log NL review score write
+      if (stu.scores && Object.values(stu.scores).some((v) => v !== null)) {
+        logAction({
+          action: "score.updated",
+          targetType: "Student",
+          targetId: student.id,
+          targetName: student.name,
+          detail: { ...stu.scores, operator: "nl-review", sessionCode: draft.sessionCode },
         });
       }
     }
