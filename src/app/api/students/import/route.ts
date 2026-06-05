@@ -30,13 +30,13 @@ export async function POST(request: NextRequest) {
     const headers = Object.keys(firstRow);
 
     const nameKey = headers.find((h) => ["姓名", "name", "Name"].includes(h)) || "";
-    const classKey = headers.find((h) => ["班级", "class", "Class"].includes(h)) || "";
+    const classKey = headers.find((h) => ["班级", "班级编号", "class", "Class", "classCode"].includes(h)) || "";
     const studentIdKey = headers.find((h) => ["学号", "studentId", "student_id", "学籍号"].includes(h)) || "";
     const genderKey = headers.find((h) => ["性别", "gender", "Gender"].includes(h)) || "";
 
     if (!nameKey || !classKey || !studentIdKey) {
       return NextResponse.json(
-        { error: `文件缺少必要列：${!nameKey ? "姓名, " : ""}${!classKey ? "班级, " : ""}${!studentIdKey ? "学号, " : ""}`.replace(/, $/, "") },
+        { error: `文件缺少必要列：${!nameKey ? "姓名, " : ""}${!classKey ? "班级编号, " : ""}${!studentIdKey ? "学号, " : ""}`.replace(/, $/, "") },
         { status: 400 }
       );
     }
@@ -47,20 +47,26 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const name = String(row[nameKey] || "").trim();
-      const className = String(row[classKey] || "").trim();
+      const classCode = String(row[classKey] || "").trim();
       const studentId = String(row[studentIdKey] || "").trim();
       const gender = genderKey ? String(row[genderKey] || "男").trim() : "男";
 
-      if (!name || !className || !studentId) {
+      if (!name || !classCode || !studentId) {
         errors.push(`第 ${i + 2} 行：缺少必填字段`);
         continue;
       }
 
       try {
+        // Find or create class by code
+        let cls = await prisma.class.findUnique({ where: { code: classCode } });
+        if (!cls) {
+          cls = await prisma.class.create({ data: { code: classCode } });
+        }
+
         await prisma.student.create({
           data: {
             name,
-            class: className,
+            classId: cls.id,
             studentId,
             gender: ["男", "女"].includes(gender) ? gender : "男",
             labels: "[]",

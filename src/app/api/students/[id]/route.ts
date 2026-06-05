@@ -14,6 +14,7 @@ export async function GET(
         sessionMetrics: { orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 365 },
         events: { include: { session: { select: { date: true, code: true, semesterNumber: true } } }, orderBy: { createdAt: "desc" } },
         communications: { include: { session: { select: { date: true, code: true } } }, orderBy: { createdAt: "desc" } },
+        class: { select: { id: true, code: true, name: true } },
       },
     });
 

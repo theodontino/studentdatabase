@@ -10,12 +10,20 @@ export async function POST(
   try {
     const { id: semesterId } = await params;
     const body = await request.json().catch(() => ({}));
-    const className: string | undefined = body.className || undefined;
+    const classCode: string | undefined = body.classCode || body.className || undefined;
     const today = new Date().toISOString().split("T")[0];
 
+    // Resolve classId from classCode or className
+    let classId: string | null = null;
+    if (classCode) {
+      const cls = await prisma.class.findFirst({
+        where: { OR: [{ code: classCode }, { name: classCode }] },
+      });
+      classId = cls?.id ?? null;
+    }
+
     // Generate code: YYYYMMDDNN
-    const dateCode = today.replace(/-/g, ""); // "20260604"
-    // Find existing sessions for today to determine sequence number
+    const dateCode = today.replace(/-/g, "");
     const todaySessions = await prisma.classSession.findMany({
       where: { code: { startsWith: dateCode } },
       orderBy: { code: "desc" },
@@ -32,32 +40,25 @@ export async function POST(
     }
     const code = dateCode + String(seq).padStart(2, "0");
 
-    // Check if this specific code already exists (safety)
     const existing = await prisma.classSession.findUnique({ where: { code } });
     if (existing) {
       return NextResponse.json({ error: "课次编码已存在", existing }, { status: 409 });
     }
 
-    // Get next semester number (per-class within semester)
+    // Get next semester number (per-classId within semester)
     const lastSession = await prisma.classSession.findFirst({
-      where: { semesterId, class: className ?? null },
+      where: { semesterId, classId },
       orderBy: { semesterNumber: "desc" },
     });
     const nextNumber = (lastSession?.semesterNumber ?? 0) + 1;
 
     // Create session
     const session = await prisma.classSession.create({
-      data: {
-        code,
-        semesterId,
-        semesterNumber: nextNumber,
-        date: today,
-        class: className ?? null,
-      },
+      data: { code, semesterId, semesterNumber: nextNumber, date: today, classId },
     });
 
     // Auto-create attendance: scoped to class if specified
-    const studentWhere = className ? { class: className } : {};
+    const studentWhere = classId ? { classId } : {};
     const students = await prisma.student.findMany({
       where: studentWhere,
       select: { id: true },
@@ -73,14 +74,10 @@ export async function POST(
       });
     }
 
-    // Recalculate scoreD for students in this semester
     await recalculateScoreD(semesterId, today);
 
     return NextResponse.json(
-      {
-        ...session,
-        studentCount: students.length,
-      },
+      { ...session, studentCount: students.length },
       { status: 201 }
     );
   } catch (error) {
@@ -110,13 +107,8 @@ export async function DELETE(
 
     const today = new Date().toISOString().split("T")[0];
 
-    // Delete session (cascade deletes attendance)
     await prisma.classSession.delete({ where: { code } });
-
-    // Reorder semester numbers
     await reorderSemesterNumbers(semesterId);
-
-    // Recalculate D
     await recalculateScoreD(semesterId, today);
 
     return NextResponse.json({ success: true });
@@ -126,18 +118,17 @@ export async function DELETE(
   }
 }
 
-// Helper: reorder semesterNumber per-class (each class has independent numbering)
+// Helper: reorder semesterNumber per-classId (each class has independent numbering)
 async function reorderSemesterNumbers(semesterId: string) {
-  // Get distinct classes for this semester
-  const classes = await prisma.classSession.findMany({
+  const classIds = await prisma.classSession.findMany({
     where: { semesterId },
-    select: { class: true },
-    distinct: ["class"],
+    select: { classId: true },
+    distinct: ["classId"],
   });
 
-  for (const cls of classes) {
+  for (const { classId } of classIds) {
     const sessions = await prisma.classSession.findMany({
-      where: { semesterId, class: cls.class },
+      where: { semesterId, classId },
       orderBy: { code: "asc" },
       select: { code: true },
     });
@@ -151,17 +142,13 @@ async function reorderSemesterNumbers(semesterId: string) {
 }
 
 // Helper: recalculate scoreD = ROUND(5 * present_count / total_sessions)
-// Using date-based current semester detection
 async function recalculateScoreD(semesterId: string, date: string) {
   const totalSessions = await prisma.classSession.count({
     where: { semesterId },
   });
   if (totalSessions === 0) return;
 
-  // Get students who have attendance in this semester
-  const students = await prisma.student.findMany({
-    select: { id: true },
-  });
+  const students = await prisma.student.findMany({ select: { id: true } });
 
   for (const student of students) {
     const presentCount = await prisma.attendance.count({
@@ -174,7 +161,6 @@ async function recalculateScoreD(semesterId: string, date: string) {
 
     const scoreD = Math.round((5 * presentCount) / totalSessions);
 
-    // v0.4: update scoreD on student's latest metric (don't create A/B/C=0 rows)
     const latestMetric = await prisma.sessionMetric.findFirst({
       where: { studentId: student.id },
       orderBy: { createdAt: "desc" },
@@ -184,7 +170,7 @@ async function recalculateScoreD(semesterId: string, date: string) {
       await prisma.sessionMetric.update({ where: { id: latestMetric.id }, data: { scoreD } });
     } else {
       await prisma.sessionMetric.create({
-        data: { studentId: student.id, date, sessionId: null, scoreA: 3, scoreB: 3, scoreC: 3, scoreD },
+        data: { studentId: student.id, date, sessionId: null, scoreA: 3, scoreB: 3, scoreC: 3, scoreD, operator: "system" },
       });
     }
   }

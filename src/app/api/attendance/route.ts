@@ -86,7 +86,7 @@ export async function PUT(request: NextRequest) {
           await prisma.sessionMetric.update({ where: { id: latestMetric.id }, data: { scoreD } });
         } else {
           await prisma.sessionMetric.create({
-            data: { studentId: u.studentId, date: today, sessionId: null, scoreA: 3, scoreB: 3, scoreC: 3, scoreD },
+            data: { studentId: u.studentId, date: today, sessionId: null, scoreA: 3, scoreB: 3, scoreC: 3, scoreD, operator: "system" },
           });
         }
       }

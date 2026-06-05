@@ -7,17 +7,28 @@ datasource db {
   provider = "sqlite"
 }
 
+// 0. 班级（v0.10: 独立表，替换 Student.class / ClassSession.class 自由字符串）
+model Class {
+  id    String @id @default(cuid())
+  code  String @unique   // 班级编号，如 "G3-01"，必填
+  name  String?          // 班级名称，如 "高三(1)班"，可空
+
+  students Student[]
+  sessions ClassSession[]
+}
+
 // 1. 学生基础档案
 model Student {
   id         String   @id @default(cuid())
   name       String
-  class      String
+  classId    String
   studentId  String   @unique
   gender     String   // "男" | "女"
   labels     String   @default("[]") // JSON array, e.g. ["#逻辑强","#敏感"]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  class           Class             @relation(fields: [classId], references: [id])
   sessionMetrics  SessionMetric[]
   events          Event[]
   communications  Communication[]
@@ -33,7 +44,7 @@ model SessionMetric {
   scoreB    Int      // 0-5
   scoreC    Int      // 0-5
   scoreD    Int      @default(3) // 0-5，考勤自动计算
-  operator  String   @default("教师")
+  operator  String   // "quick-score" | "nl-review" | "teacher" | "system"
   sessionId String?  // 关联课次（可空，NL输入等无课次场景为null）
   createdAt DateTime @default(now())
 
@@ -71,16 +82,18 @@ model Event {
 
   student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
   session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, sessionId, description])
 }
 
 // 4. 家校沟通记录（绑定课次）
 model Communication {
-  id          String   @id @default(cuid())
-  studentId   String
-  sessionId   String   // 关联课次（必填）
-  target      String   // 沟通对象，如 "父亲"、"母亲"
-  summary     String   // 内容摘要
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  studentId String
+  sessionId String   // 关联课次（必填）
+  target    String   // 沟通对象，如 "父亲"、"母亲"
+  summary   String   // 内容摘要
+  createdAt DateTime @default(now())
 
   student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
   session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -94,6 +107,7 @@ model DraftRecord {
   reviewResult String?  // JSON
   status       String   @default("pending") // "pending" | "confirmed" | "rejected"
   sessionCode  String?  // v0.7: 关联课次编码（可选）
+  studentId    String?  // v0.10: 解析时匹配到的 studentId
   createdAt    DateTime @default(now())
 }
 
@@ -115,10 +129,11 @@ model ClassSession {
   semesterId     String
   semesterNumber Int                       // 学期内序号（1,2,3...），增删后应用层重排
   date           String                    // YYYY-MM-DD，冗余，从 code 推导方便索引
-  class          String?                   // 可空，班级名；null 表示全校
+  classId        String?                   // 班级 FK；null = 全校
   createdAt      DateTime @default(now())
 
   semester    Semester         @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  class       Class?           @relation(fields: [classId], references: [id])
   attendances Attendance[]
   sessionMetrics SessionMetric[]
   events         Event[]

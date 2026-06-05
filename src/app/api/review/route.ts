@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
           if (existing) await archiveMetricBeforeUpdate(existing.id);
           await prisma.sessionMetric.upsert({
             where: { studentId_sessionId: { studentId: student.id, sessionId } },
-            create: { studentId: student.id, date: today, sessionId, scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3 },
+            create: { studentId: student.id, date: today, sessionId, scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3, operator: "nl-review" },
             update: { scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3 },
           });
         } else {
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
             });
           } else {
             await prisma.sessionMetric.create({
-              data: { studentId: student.id, date: today, sessionId: null, scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3 },
+              data: { studentId: student.id, date: today, sessionId: null, scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3, operator: "nl-review" },
             });
           }
         }

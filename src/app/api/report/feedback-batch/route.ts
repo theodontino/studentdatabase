@@ -37,13 +37,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ cached: true, total: cached.total, sessionCode });
     }
 
-    const session = await prisma.classSession.findUnique({ where: { code: sessionCode } });
+    const session = await prisma.classSession.findUnique({
+      where: { code: sessionCode },
+      include: { class: { select: { name: true } } },
+    });
     if (!session) return NextResponse.json({ error: "课次不存在" }, { status: 404 });
-    const className = session.class;
+    const className = session.class?.name;
     if (!className) return NextResponse.json({ error: "该课次未关联班级" }, { status: 400 });
 
     const students = await prisma.student.findMany({
-      where: { class: className },
+      where: { classId: session.classId! },
       select: { id: true, name: true, labels: true },
     });
     if (students.length === 0) return NextResponse.json({ error: "该班级无学生" }, { status: 404 });

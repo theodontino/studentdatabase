@@ -10,9 +10,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "请输入文本内容" }, { status: 400 });
     }
 
-    // Get all student names for entity matching
+    // Get all students for entity matching
     const students = await prisma.student.findMany({
-      select: { name: true },
+      select: { id: true, name: true },
     });
     const studentNames = students.map((s) => s.name);
 
@@ -21,6 +21,12 @@ export async function POST(request: NextRequest) {
 
     // v0.5: fuzzy-correct student names to exact DB names
     parsedResult = correctNames(parsedResult, studentNames);
+
+    // v0.10: match students by corrected name to get studentId
+    const nameToId = new Map(students.map((s) => [s.name, s.id]));
+    const matchedStudentIds = parsedResult.students
+      .map((stu) => nameToId.get(stu.name) ?? null)
+      .filter(Boolean) as string[];
 
     // Step 2: LLM self-review
     let reviewResult = null;
@@ -39,6 +45,7 @@ export async function POST(request: NextRequest) {
         reviewResult: reviewResult ? JSON.stringify(reviewResult) : null,
         status: "pending",
         sessionCode: sessionCode || null,
+        studentId: matchedStudentIds[0] ?? null,  // v0.10: store primary matched studentId
       },
     });
 

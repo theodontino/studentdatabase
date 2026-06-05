@@ -10,7 +10,9 @@ const DIM_LABEL: Record<string, string> = {
 
 export async function GET() {
   try {
-    const students = await prisma.student.findMany();
+    const students = await prisma.student.findMany({
+      include: { class: { select: { name: true } } },
+    });
     if (students.length === 0) {
       return NextResponse.json({
         classOverview: [],
@@ -61,9 +63,10 @@ export async function GET() {
     // ── 按班级分组 ──
     const classStudents = new Map<string, typeof students>();
     for (const s of students) {
-      const arr = classStudents.get(s.class) || [];
+      const clsName = s.class.name ?? "";
+      const arr = classStudents.get(clsName) || [];
       arr.push(s);
-      classStudents.set(s.class, arr);
+      classStudents.set(clsName, arr);
     }
 
     // ── 班级概览 + 班级预警 ──
@@ -182,7 +185,7 @@ export async function GET() {
           studentAlerts.push({
             studentId: student.id,
             studentName: student.name,
-            class: student.class,
+            class: student.class.name ?? "",
             dimension: DIM_LABEL[dim],
             score,
             classAvg: avg,
@@ -195,7 +198,7 @@ export async function GET() {
           studentAlerts.push({
             studentId: student.id,
             studentName: student.name,
-            class: student.class,
+            class: student.class.name ?? "",
             dimension: DIM_LABEL[dim],
             score,
             classAvg: avg,
@@ -214,7 +217,7 @@ export async function GET() {
           studentAlerts.push({
             studentId: s.id,
             studentName: s.name,
-            class: s.class,
+            class: s.class.name ?? "",
             dimension: DIM_LABEL.D,
             score: absences,
             classAvg: totalSessions,
@@ -225,7 +228,7 @@ export async function GET() {
           studentAlerts.push({
             studentId: s.id,
             studentName: s.name,
-            class: s.class,
+            class: s.class.name ?? "",
             dimension: DIM_LABEL.D,
             score: absences,
             classAvg: totalSessions,

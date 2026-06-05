@@ -8,7 +8,10 @@ export async function POST(request: NextRequest) {
     const { studentId, days, sessionCode } = await request.json();
     if (!studentId) return NextResponse.json({ error: "缺少学生ID" }, { status: 400 });
 
-    const student = await prisma.student.findUnique({ where: { id: studentId } });
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: { class: { select: { name: true } } },
+    });
     if (!student) return NextResponse.json({ error: "学生不存在" }, { status: 404 });
 
     let metrics: any[], events: any[], comms: any[], attendances: any[];
@@ -28,7 +31,7 @@ export async function POST(request: NextRequest) {
 
       const m = metrics[0];
       const att = attendances[0];
-      context = `${student.name}（${student.class}）在 ${session.date} 第${session.semesterNumber}次课（${sessionCode}）的表现：
+      context = `${student.name}（${student.class?.name ?? ""}）在 ${session.date} 第${session.semesterNumber}次课（${sessionCode}）的表现：
 - 学习(A): ${m?.scoreA ?? "—"} | 纪律(B): ${m?.scoreB ?? "—"} | 作业(C): ${m?.scoreC ?? "—"} | 考勤(D): ${m?.scoreD ?? "—"}
 - 出勤: ${att ? (att.present ? "到课" : "缺勤") : "无记录"}
 - 事件: ${events.map((e) => e.description).join("；") || "无"}
@@ -51,7 +54,7 @@ export async function POST(request: NextRequest) {
       const avgC = metrics.length ? (metrics.reduce((s, m) => s + m.scoreC, 0) / metrics.length).toFixed(1) : "—";
       const total = attendances.length;
       const present = attendances.filter((a) => a.present).length;
-      context = `${student.name}（${student.class}）近${d}天表现：
+      context = `${student.name}（${student.class?.name ?? ""}）近${d}天表现：
 - 学习(A): 均分${avgA} | 纪律(B): 均分${avgB} | 作业(C): 均分${avgC}
 - 考勤: ${total ? `${present}/${total}` : "无记录"}
 - 关键事件: ${events.map((e) => e.description).join("；") || "无"}

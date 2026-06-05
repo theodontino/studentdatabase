@@ -6,10 +6,13 @@ export async function GET() {
   try {
     const students = await prisma.student.findMany({
       orderBy: { createdAt: "desc" },
+      include: { class: { select: { id: true, code: true, name: true } } },
     });
     return NextResponse.json(
       students.map((s) => ({
         ...s,
+        class: s.class.name ?? s.class.code,
+        classCode: s.class.code,
         labels: JSON.parse(s.labels),
       }))
     );
@@ -23,19 +26,25 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, class: className, studentId, gender, labels } = body;
+    const { name, classCode, studentId, gender, labels } = body;
 
-    if (!name || !className || !studentId || !gender) {
+    if (!name || !classCode || !studentId || !gender) {
       return NextResponse.json(
-        { error: "姓名、班级、学号、性别为必填项" },
+        { error: "姓名、班级编号、学号、性别为必填项" },
         { status: 400 }
       );
+    }
+
+    // Find or create class by code
+    let cls = await prisma.class.findUnique({ where: { code: classCode } });
+    if (!cls) {
+      cls = await prisma.class.create({ data: { code: classCode } });
     }
 
     const student = await prisma.student.create({
       data: {
         name,
-        class: className,
+        classId: cls.id,
         studentId,
         gender,
         labels: JSON.stringify(labels || []),

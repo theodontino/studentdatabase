@@ -11,20 +11,26 @@ export async function GET(request: NextRequest) {
 
     const where: Record<string, unknown> = {};
     if (semesterId) where.semesterId = semesterId;
-    if (className) where.class = className;
     if (date) where.date = date;
+    if (className) {
+      // Look up class by name to get classId
+      const cls = await prisma.class.findFirst({ where: { name: className } });
+      where.classId = cls?.id ?? null;
+    }
 
     const sessions = await prisma.classSession.findMany({
       where,
       orderBy: { code: "desc" },
       include: {
         _count: { select: { attendances: true } },
+        class: { select: { code: true, name: true } },
       },
     });
 
     return NextResponse.json(
       sessions.map((s) => ({
         ...s,
+        class: s.class?.name ?? s.class?.code ?? null,
         attendanceCount: s._count.attendances,
         _count: undefined,
       }))

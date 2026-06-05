@@ -11,46 +11,44 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   // Clean existing data
   await prisma.attendance.deleteMany();
-  await prisma.classSession.deleteMany();
-  await prisma.semester.deleteMany();
-  await prisma.draftRecord.deleteMany();
   await prisma.event.deleteMany();
   await prisma.communication.deleteMany();
   await prisma.sessionMetric.deleteMany();
+  await prisma.classSession.deleteMany();
+  await prisma.semester.deleteMany();
+  await prisma.draftRecord.deleteMany();
   await prisma.student.deleteMany();
+  await prisma.class.deleteMany();
+
+  // Create classes
+  const class1 = await prisma.class.create({
+    data: { code: "G3-01", name: "高三(1)班" },
+  });
+  const class2 = await prisma.class.create({
+    data: { code: "UH04477", name: null }, // 班级名可空
+  });
 
   // Create students
   const s1 = await prisma.student.create({
     data: {
-      name: "张三",
-      class: "高三(1)班",
-      studentId: "2024001",
-      gender: "男",
-      labels: JSON.stringify(["#逻辑强", "#基础扎实"]),
+      name: "张三", classId: class1.id, studentId: "2024001",
+      gender: "男", labels: JSON.stringify(["#逻辑强", "#基础扎实"]),
     },
   });
-
   const s2 = await prisma.student.create({
     data: {
-      name: "李四",
-      class: "高三(1)班",
-      studentId: "2024002",
-      gender: "女",
-      labels: JSON.stringify(["#敏感", "#基础弱", "#用功"]),
+      name: "李四", classId: class1.id, studentId: "2024002",
+      gender: "女", labels: JSON.stringify(["#敏感", "#基础弱", "#用功"]),
     },
   });
-
   const s3 = await prisma.student.create({
     data: {
-      name: "王五",
-      class: "高三(1)班",
-      studentId: "2024003",
-      gender: "男",
-      labels: JSON.stringify(["#调皮", "#聪明"]),
+      name: "王五", classId: class1.id, studentId: "2024003",
+      gender: "男", labels: JSON.stringify(["#调皮", "#聪明"]),
     },
   });
 
-  // Create sample sessions and seed data (events/communications now bind to sessions)
+  // Create sample sessions and seed data
   const today = new Date();
   const semester = await prisma.semester.create({
     data: {
@@ -60,29 +58,23 @@ async function main() {
     },
   });
 
-  const className = "高三(1)班";
-
-  // Create 7 class sessions (past 7 days) with new code system
+  // Create 7 class sessions (past 7 days) for class1
   const sessions: any[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split("T")[0];
-    const code = dateStr.replace(/-/g, "") + "01"; // e.g., "2026060401"
+    const code = dateStr.replace(/-/g, "") + "01";
     const sessionNum = 7 - i + 1;
 
     const session = await prisma.classSession.create({
       data: {
-        code,
-        semesterId: semester.id,
-        semesterNumber: sessionNum,
-        date: dateStr,
-        class: className,
+        code, semesterId: semester.id, semesterNumber: sessionNum,
+        date: dateStr, classId: class1.id,
       },
     });
     sessions.push(session);
 
-    // Default all students present, except 李四 absent on day 3 & 5
     for (const s of [s1, s2, s3]) {
       const absent = s.name === "李四" && (sessionNum === 3 || sessionNum === 5);
       await prisma.attendance.create({
@@ -91,7 +83,7 @@ async function main() {
     }
   }
 
-  // Create session metrics for past 7 days (using the last 7 sessions)
+  // Create session metrics for past 7 days
   for (let i = 0; i < sessions.length; i++) {
     const session = sessions[i];
     await prisma.sessionMetric.create({
@@ -99,6 +91,7 @@ async function main() {
         scoreA: Math.min(5, 4 + Math.floor(Math.random() * 2)),
         scoreB: Math.min(5, 3 + Math.floor(Math.random() * 3)),
         scoreC: Math.min(5, 3 + Math.floor(Math.random() * 3)),
+        operator: "teacher",
       },
     });
     await prisma.sessionMetric.create({
@@ -106,6 +99,7 @@ async function main() {
         scoreA: Math.min(5, 2 + Math.floor(Math.random() * 3)),
         scoreB: Math.min(5, 2 + Math.floor(Math.random() * 3)),
         scoreC: Math.min(5, 3 + Math.floor(Math.random() * 2)),
+        operator: "teacher",
       },
     });
     await prisma.sessionMetric.create({
@@ -113,6 +107,7 @@ async function main() {
         scoreA: Math.min(5, 3 + Math.floor(Math.random() * 3)),
         scoreB: Math.min(5, 1 + Math.floor(Math.random() * 3)),
         scoreC: Math.min(5, 2 + Math.floor(Math.random() * 3)),
+        operator: "teacher",
       },
     });
   }
@@ -135,6 +130,7 @@ async function main() {
   });
 
   console.log("✅ Seed data created successfully!");
+  console.log(`   Classes: ${class1.code}(${class1.name}), ${class2.code}`);
   console.log(`   Students: ${s1.name}, ${s2.name}, ${s3.name}`);
 }
 
