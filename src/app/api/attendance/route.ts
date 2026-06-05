@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const records = await prisma.attendance.findMany({
       where: { sessionId },
-      include: { student: { select: { name: true, class: true } } },
+      include: { student: { select: { name: true, class: { select: { name: true } } } } },
       orderBy: { student: { name: "asc" } },
     });
 

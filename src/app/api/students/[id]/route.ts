@@ -24,6 +24,7 @@ export async function GET(
 
     return NextResponse.json({
       ...student,
+      class: student.class?.name ?? student.class?.code ?? "",
       labels: JSON.parse(student.labels),
     });
   } catch (error) {
@@ -40,21 +41,34 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, class: className, studentId, gender, labels } = body;
+    const { name, classCode, class: className, studentId, gender, labels } = body;
+    const code = classCode || className;  // accept both classCode (new) and class (legacy)
+
+    // Resolve class to classId if provided
+    let classId: string | undefined;
+    if (code) {
+      const cls = await prisma.class.findFirst({
+        where: { OR: [{ code }, { name: code }] },
+      });
+      if (!cls) return NextResponse.json({ error: "班级不存在" }, { status: 400 });
+      classId = cls.id;
+    }
 
     const student = await prisma.student.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
-        ...(className !== undefined && { class: className }),
+        ...(classId !== undefined && { classId }),
         ...(studentId !== undefined && { studentId }),
         ...(gender !== undefined && { gender }),
         ...(labels !== undefined && { labels: JSON.stringify(labels) }),
       },
+      include: { class: { select: { code: true, name: true } } },
     });
 
     return NextResponse.json({
       ...student,
+      class: student.class?.name ?? student.class?.code ?? "",
       labels: JSON.parse(student.labels),
     });
   } catch (error: any) {
