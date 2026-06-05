@@ -11,7 +11,7 @@ const DIM_LABEL: Record<string, string> = {
 export async function GET() {
   try {
     const students = await prisma.student.findMany({
-      include: { class: { select: { name: true } } },
+      include: { class: { select: { name: true, code: true } } },
     });
     if (students.length === 0) {
       return NextResponse.json({
@@ -124,89 +124,63 @@ export async function GET() {
       }
     }
 
-    // ── 学生预警：A/B/C 相对排名 ──
+    // ── 学生预警：综合偏差排名，每班取后 20% ──
     const studentAlerts: {
-      studentId: string;
-      studentName: string;
-      class: string;
-      dimension: string;
-      score: number;
-      classAvg: number;
-      deviation: number;
+      studentId: string; studentName: string; class: string;
+      dimension: string; score: number; classAvg: number; deviation: number;
       severity: "red" | "yellow";
     }[] = [];
 
     for (const [className, stuList] of classStudents) {
-      if (stuList.length < 3) continue; // 至少 3 人才有意义
+      if (stuList.length < 3) continue;
 
-      // 计算本班 A/B/C 均分
       const clsOverview = classOverview.find((c) => c.name === className);
       if (!clsOverview || clsOverview.avgA === 0) continue;
       const avgs = { A: clsOverview.avgA, B: clsOverview.avgB, C: clsOverview.avgC };
 
-      for (const dim of ["A", "B", "C"] as const) {
-        const avg = avgs[dim];
-        // 收集低于均分的学生
-        const below: { student: typeof students[0]; score: number; deviation: number }[] = [];
+      // 每个学生的三维偏差 + 综合均值
+      type Entry = { student: typeof students[0]; devA: number; devB: number; devC: number; avgDev: number; sA: number; sB: number; sC: number };
+      const composite: Entry[] = [];
 
-        for (const s of stuList) {
-          const latest = metricsByStudent.get(s.id)?.[0];
-          if (!latest) continue;
-          const score = dim === "A" ? latest.scoreA : dim === "B" ? latest.scoreB : latest.scoreC;
-          const dev = score - avg;
-          if (dev < 0) {
-            below.push({ student: s, score, deviation: +(dev.toFixed(1)) });
-          }
-        }
-
-        if (below.length === 0) continue;
-
-        // 按 deviation 升序（越负越靠前）
-        below.sort((a, b) => a.deviation - b.deviation);
-
-        const totalBelow = below.length;
-        const redCutoff = Math.max(1, Math.ceil(totalBelow * 0.1));
-        const yellowCutoff = Math.max(redCutoff + 1, Math.ceil(totalBelow * 0.2));
-
-        // 处理并列：如果 cutoff 位置后有同分者，一并纳入
-        const getEffectiveCut = (baseCut: number): number => {
-          if (baseCut >= totalBelow) return totalBelow;
-          const cutoffDev = below[baseCut - 1].deviation;
-          let i = baseCut;
-          while (i < totalBelow && below[i].deviation === cutoffDev) i++;
-          return i;
-        };
-
-        const redEnd = getEffectiveCut(redCutoff);
-        const yellowEnd = getEffectiveCut(yellowCutoff);
-
-        for (let i = 0; i < redEnd; i++) {
-          const { student, score, deviation } = below[i];
-          studentAlerts.push({
-            studentId: student.id,
-            studentName: student.name,
-            class: student.class.name ?? student.class.code,
-            dimension: DIM_LABEL[dim],
-            score,
-            classAvg: avg,
-            deviation,
-            severity: "red",
-          });
-        }
-        for (let i = redEnd; i < yellowEnd; i++) {
-          const { student, score, deviation } = below[i];
-          studentAlerts.push({
-            studentId: student.id,
-            studentName: student.name,
-            class: student.class.name ?? student.class.code,
-            dimension: DIM_LABEL[dim],
-            score,
-            classAvg: avg,
-            deviation,
-            severity: "yellow",
-          });
-        }
+      for (const s of stuList) {
+        const m = metricsByStudent.get(s.id)?.[0];
+        if (!m) continue;
+        const dA = +(m.scoreA - avgs.A).toFixed(1);
+        const dB = +(m.scoreB - avgs.B).toFixed(1);
+        const dC = +(m.scoreC - avgs.C).toFixed(1);
+        composite.push({ student: s, devA: dA, devB: dB, devC: dC, avgDev: +((dA+dB+dC)/3).toFixed(1), sA: m.scoreA, sB: m.scoreB, sC: m.scoreC });
       }
+      if (composite.length < 3) continue;
+
+      composite.sort((a, b) => a.avgDev - b.avgDev);
+      const total = composite.length;
+      const redCut = Math.max(1, Math.ceil(total * 0.1));
+      const ylwCut = Math.max(redCut + 1, Math.ceil(total * 0.2));
+
+      const cutoff = (base: number) => {
+        if (base >= total) return total;
+        const max = Math.min(total, Math.ceil(base * 1.5));
+        const v = composite[base - 1].avgDev;
+        let i = base; while (i < max && composite[i].avgDev === v) i++;
+        return i;
+      };
+      const redEnd = cutoff(redCut), ylwEnd = cutoff(ylwCut);
+
+      const push = (e: Entry, sev: "red" | "yellow") => {
+        const dims = ([["A", e.devA, e.sA], ["B", e.devB, e.sB], ["C", e.devC, e.sC]] as const)
+          .filter(([, d]) => d < 0)
+          .sort((a, b) => a[1] - b[1]);
+        const worst = dims.length > 0 ? dims[0] : ["A", e.devA, e.sA] as const;
+        studentAlerts.push({
+          studentId: e.student.id, studentName: e.student.name,
+          class: e.student.class.name ?? e.student.class.code,
+          dimension: DIM_LABEL[worst[0]], score: worst[2],
+          classAvg: avgs[worst[0]], deviation: worst[1], severity: sev,
+        });
+      };
+
+      for (let i = 0; i < redEnd; i++) push(composite[i], "red");
+      for (let i = redEnd; i < ylwEnd; i++) push(composite[i], "yellow");
     }
 
     // ── 学生预警：D 维度 考勤独立 ──
