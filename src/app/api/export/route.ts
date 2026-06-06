@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const sheet1Data = students.map((s) => ({
       "姓名": s.name,
       "班级编码": s.class.code,
-      "班级": s.class.name ?? "",
+      "班级": s.class.name ?? s.class.code,
       "学号": s.studentId,
       "性别": s.gender,
       "标签": JSON.parse(s.labels).join(", "),

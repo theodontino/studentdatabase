@@ -12,11 +12,11 @@ export async function POST(request: NextRequest) {
 
     const session = await prisma.classSession.findUnique({
       where: { code: sessionCode },
-      include: { class: { select: { name: true } } },
+      include: { class: { select: { name: true, code: true } } },
     });
     if (!session) return NextResponse.json({ error: "课次不存在" }, { status: 404 });
 
-    const className = session.class?.name;
+    const className = session.class?.name ?? session.class?.code;
     if (!className) return NextResponse.json({ error: "该课次未关联班级" }, { status: 400 });
 
     const students = await prisma.student.findMany({
