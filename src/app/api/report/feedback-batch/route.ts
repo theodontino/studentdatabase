@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     const students = await prisma.student.findMany({
       where: { classId: session.classId! },
-      select: { id: true, name: true, labels: true },
+      select: { id: true, name: true, studentLabels: { include: { label: { select: { name: true } } } } },
     });
     if (students.length === 0) return NextResponse.json({ error: "该班级无学生" }, { status: 404 });
 
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     const studentCards = students.map(s => ({
       id: s.id,
       name: s.name,
-      labels: JSON.parse(s.labels) as string[],
+      labels: (s.studentLabels || []).map((sl) => sl.label.name),
     }));
 
     const stream = new ReadableStream({

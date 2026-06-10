@@ -69,7 +69,6 @@ export async function POST(request: NextRequest) {
             classId: cls.id,
             studentId,
             gender: ["男", "女"].includes(gender) ? gender : "男",
-            labels: "[]",
           },
         });
         successCount++;

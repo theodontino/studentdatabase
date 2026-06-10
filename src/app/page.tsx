@@ -192,6 +192,33 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* v0.13: 一键反馈工作流入口 */}
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+          <span>🚀 快捷反馈流程</span>
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { href: "/input", icon: "✏️", label: "输入", desc: "NL 自然语言录入", color: "bg-blue-500" },
+            { href: "/review", icon: "✅", label: "确认", desc: "复核 LLM 解析结果", color: "bg-green-500" },
+            { href: "/report", icon: "📋", label: "反馈", desc: "生成家长反馈报告", color: "bg-amber-500" },
+            { href: "/export", icon: "📥", label: "导出", desc: "导出 Excel 归档", color: "bg-purple-500" },
+          ].map((item) => (
+            <div
+              key={item.href}
+              onClick={() => router.push(item.href)}
+              className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+            >
+              <div className={`w-10 h-10 rounded-lg ${item.color} flex items-center justify-center text-white text-lg mb-3`}>
+                {item.icon}
+              </div>
+              <h4 className="font-semibold text-gray-800 text-sm">{item.label}</h4>
+              <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Class Overview */}
       <div>
         <h3 className="text-lg font-semibold text-gray-800 mb-3">

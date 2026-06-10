@@ -39,6 +39,7 @@ export async function GET(
       include: {
         sessionMetrics: { orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 365 },
         class: { select: { id: true, code: true, name: true } },
+        studentLabels: { include: { label: { select: { id: true, name: true } } } },
       },
     });
 
@@ -49,7 +50,7 @@ export async function GET(
     return NextResponse.json({
       ...student,
       class: student.class?.name ?? student.class?.code ?? "",
-      labels: JSON.parse(student.labels),
+      labels: student.studentLabels.map((sl) => ({ id: sl.label.id, name: sl.label.name })),
       events: events.slice(0, eventLimit),
       communications: communications.slice(0, commLimit),
       _pagination: {
@@ -71,10 +72,9 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, classCode, class: className, studentId, gender, labels } = body;
-    const code = classCode || className;  // accept both classCode (new) and class (legacy)
+    const { name, classCode, class: className, studentId, gender, labelNames } = body;
+    const code = classCode || className;
 
-    // Resolve class to classId if provided
     let classId: string | undefined;
     if (code) {
       const cls = await prisma.class.findFirst({
@@ -84,22 +84,38 @@ export async function PUT(
       classId = cls.id;
     }
 
-    const student = await prisma.student.update({
+    // v0.13: sync labels via StudentLabel
+    if (labelNames !== undefined) {
+      await prisma.studentLabel.deleteMany({ where: { studentId: id } });
+      for (const name of labelNames) {
+        let label = await prisma.label.findUnique({ where: { name } });
+        if (!label) label = await prisma.label.create({ data: { name } });
+        await prisma.studentLabel.create({ data: { studentId: id, labelId: label.id } });
+      }
+    }
+
+    await prisma.student.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
         ...(classId !== undefined && { classId }),
         ...(studentId !== undefined && { studentId }),
         ...(gender !== undefined && { gender }),
-        ...(labels !== undefined && { labels: JSON.stringify(labels) }),
       },
-      include: { class: { select: { code: true, name: true } } },
+    });
+
+    const student = await prisma.student.findUnique({
+      where: { id },
+      include: {
+        class: { select: { code: true, name: true } },
+        studentLabels: { include: { label: { select: { id: true, name: true } } } },
+      },
     });
 
     return NextResponse.json({
       ...student,
-      class: student.class?.name ?? student.class?.code ?? "",
-      labels: JSON.parse(student.labels),
+      class: student?.class?.name ?? student?.class?.code ?? "",
+      labels: (student?.studentLabels || []).map((sl) => ({ id: sl.label.id, name: sl.label.name })),
     });
   } catch (error: any) {
     if (error?.code === "P2002") {

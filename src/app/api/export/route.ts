@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
             orderBy: { session: { date: "desc" } },
           },
           class: { select: { code: true, name: true } },
+          studentLabels: { include: { label: { select: { name: true } } } },
         },
       });
 
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
           "班级": s.class.name ?? s.class.code,
           "学号": s.studentId,
           "性别": s.gender,
-          "标签": JSON.parse(s.labels).join(", "),
+          "标签": (s.studentLabels || []).map((sl) => sl.label.name).join(", "),
           "当前状态": s.sessionMetrics.length > 0
             ? `A:${s.sessionMetrics[0].scoreA} B:${s.sessionMetrics[0].scoreB} C:${s.sessionMetrics[0].scoreC} D:${s.sessionMetrics[0].scoreD}`
             : "无记录",

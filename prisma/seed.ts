@@ -28,25 +28,22 @@ async function main() {
     data: { code: "UH04477", name: null }, // 班级名可空
   });
 
-  // Create students
-  const s1 = await prisma.student.create({
-    data: {
-      name: "张三", classId: class1.id, studentId: "2024001",
-      gender: "男", labels: JSON.stringify(["#逻辑强", "#基础扎实"]),
-    },
-  });
-  const s2 = await prisma.student.create({
-    data: {
-      name: "李四", classId: class1.id, studentId: "2024002",
-      gender: "女", labels: JSON.stringify(["#敏感", "#基础弱", "#用功"]),
-    },
-  });
-  const s3 = await prisma.student.create({
-    data: {
-      name: "王五", classId: class1.id, studentId: "2024003",
-      gender: "男", labels: JSON.stringify(["#调皮", "#聪明"]),
-    },
-  });
+  // Helper: create student with labels (v0.13: Label 关联表)
+  async function createStudent(name: string, classId: string, studentId: string, gender: string, labelNames: string[]) {
+    const student = await prisma.student.create({
+      data: { name, classId, studentId, gender },
+    });
+    for (const name of labelNames) {
+      let label = await prisma.label.findUnique({ where: { name } });
+      if (!label) label = await prisma.label.create({ data: { name } });
+      await prisma.studentLabel.create({ data: { studentId: student.id, labelId: label.id } });
+    }
+    return student;
+  }
+
+  const s1 = await createStudent("张三", class1.id, "2024001", "男", ["#逻辑强", "#基础扎实"]);
+  const s2 = await createStudent("李四", class1.id, "2024002", "女", ["#敏感", "#基础弱", "#用功"]);
+  const s3 = await createStudent("王五", class1.id, "2024003", "男", ["#调皮", "#聪明"]);
 
   // Create sample sessions and seed data
   const today = new Date();

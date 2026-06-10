@@ -1,19 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// v0.13: include labels from StudentLabel + Label
+const studentInclude = {
+  class: { select: { id: true, code: true, name: true } },
+  studentLabels: { include: { label: { select: { id: true, name: true } } } },
+};
+
 // GET /api/students - list all students
 export async function GET() {
   try {
     const students = await prisma.student.findMany({
       orderBy: { createdAt: "desc" },
-      include: { class: { select: { id: true, code: true, name: true } } },
+      include: studentInclude,
     });
     return NextResponse.json(
       students.map((s) => ({
         ...s,
         class: s.class.name ?? s.class.code,
         classCode: s.class.code,
-        labels: JSON.parse(s.labels),
+        labels: s.studentLabels.map((sl) => ({ id: sl.label.id, name: sl.label.name })),
+        studentLabels: undefined,
       }))
     );
   } catch (error) {
@@ -26,8 +33,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, classCode, class: className, studentId, gender, labels } = body;
-    const code = classCode || className;  // accept both classCode (new) and class (legacy)
+    const { name, classCode, class: className, studentId, gender, labelNames } = body;
+    const code = classCode || className;
 
     if (!name || !code || !studentId || !gender) {
       return NextResponse.json(
@@ -36,7 +43,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find or create class by code/name
     let cls = await prisma.class.findFirst({
       where: { OR: [{ code }, { name: code }] },
     });
@@ -50,12 +56,20 @@ export async function POST(request: NextRequest) {
         classId: cls.id,
         studentId,
         gender,
-        labels: JSON.stringify(labels || []),
+        studentLabels: {
+          create: await resolveLabelNames(labelNames || []),
+        },
       },
+      include: studentInclude,
     });
 
     return NextResponse.json(
-      { ...student, labels: JSON.parse(student.labels) },
+      {
+        ...student,
+        class: student.class.name ?? student.class.code,
+        labels: student.studentLabels.map((sl) => ({ id: sl.label.id, name: sl.label.name })),
+        studentLabels: undefined,
+      },
       { status: 201 }
     );
   } catch (error: any) {
@@ -65,4 +79,15 @@ export async function POST(request: NextRequest) {
     console.error("[/api/students] error:", error);
     return NextResponse.json({ error: "创建学生失败" }, { status: 500 });
   }
+}
+
+// v0.13: resolve label names to Prisma create payload
+async function resolveLabelNames(names: string[]) {
+  const result: { labelId: string }[] = [];
+  for (const name of names) {
+    let label = await prisma.label.findUnique({ where: { name } });
+    if (!label) label = await prisma.label.create({ data: { name } });
+    result.push({ labelId: label.id });
+  }
+  return result;
 }

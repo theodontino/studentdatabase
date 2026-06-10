@@ -10,7 +10,7 @@ interface Student {
   classCode: string;
   studentId: string;
   gender: string;
-  labels: string[];
+  labels: { id: string; name: string }[];
   createdAt: string;
   updatedAt: string;
 }
@@ -33,7 +33,7 @@ export default function StudentsPage() {
     classCode: "",
     studentId: "",
     gender: "男",
-    labels: [] as string[],
+    labelNames: [] as string[],
   });
   const [labelInput, setLabelInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -63,7 +63,7 @@ export default function StudentsPage() {
 
   function openCreate() {
     setEditingStudent(null);
-    setForm({ name: "", classCode: "", studentId: "", gender: "男", labels: [] });
+    setForm({ name: "", classCode: "", studentId: "", gender: "男", labelNames: [] });
     setLabelInput("");
     setError("");
     setShowModal(true);
@@ -76,7 +76,7 @@ export default function StudentsPage() {
       classCode: s.classCode || s.class,
       studentId: s.studentId,
       gender: s.gender,
-      labels: s.labels,
+      labelNames: s.labels.map((l) => l.name),
     });
     setLabelInput("");
     setError("");
@@ -85,14 +85,14 @@ export default function StudentsPage() {
 
   function addLabel() {
     const trimmed = labelInput.trim();
-    if (trimmed && !form.labels.includes(trimmed)) {
-      setForm({ ...form, labels: [...form.labels, trimmed] });
+    if (trimmed && !form.labelNames.includes(trimmed)) {
+      setForm({ ...form, labelNames: [...form.labelNames, trimmed] });
     }
     setLabelInput("");
   }
 
   function removeLabel(label: string) {
-    setForm({ ...form, labels: form.labels.filter((l) => l !== label) });
+    setForm({ ...form, labelNames: form.labelNames.filter((l) => l !== label) });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -226,10 +226,10 @@ export default function StudentsPage() {
                       <div className="flex flex-wrap gap-1 mt-1">
                         {s.labels.map((label) => (
                           <span
-                            key={label}
+                            key={label.id}
                             className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded"
                           >
-                            {label}
+                            {label.name}
                           </span>
                         ))}
                       </div>
@@ -371,13 +371,13 @@ export default function StudentsPage() {
                 </div>
                 {/* v0.5: 预设标签建议 */}
                 <div className="flex flex-wrap gap-1 mt-1.5">
-                  {PRESET_TAGS.filter((t) => !form.labels.includes(t)).map((tag) => (
+                  {PRESET_TAGS.filter((t) => !form.labelNames.includes(t)).map((tag) => (
                     <button
                       key={tag}
                       type="button"
                       onClick={() => {
-                        if (!form.labels.includes(tag)) {
-                          setForm({ ...form, labels: [...form.labels, tag] });
+                        if (!form.labelNames.includes(tag)) {
+                          setForm({ ...form, labelNames: [...form.labelNames, tag] });
                         }
                       }}
                       className="text-xs bg-gray-50 text-gray-500 px-2 py-0.5 rounded border border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
@@ -386,9 +386,9 @@ export default function StudentsPage() {
                     </button>
                   ))}
                 </div>
-                {form.labels.length > 0 && (
+                {form.labelNames.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
-                    {form.labels.map((label) => (
+                    {form.labelNames.map((label) => (
                       <span
                         key={label}
                         className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded"

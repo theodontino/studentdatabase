@@ -9,7 +9,7 @@ import {
 
 interface StudentDetail {
   id: string; name: string; class: string; studentId: string;
-  gender: string; labels: string[];
+  gender: string; labels: { id: string; name: string }[];
   sessionMetrics: { id: string; date: string; scoreA: number; scoreB: number; scoreC: number; scoreD: number }[];
   events: { id: string; session: { date: string; code: string; semesterNumber: number }; type: string; description: string; rawText: string }[];
   communications: { id: string; session: { date: string; code: string }; target: string; summary: string }[];
@@ -133,7 +133,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center gap-3 mt-2">
             <div className="flex flex-wrap gap-1">
               {student.labels.map((l) => (
-                <span key={l} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{l}</span>
+                <span key={l.id} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{l.name}</span>
               ))}
             </div>
             <span className="text-xs text-gray-400">

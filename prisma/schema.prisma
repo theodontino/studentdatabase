@@ -24,6 +24,26 @@ model Class {
   sessions ClassSession[]
 }
 
+// 0b. 标签表（v0.13: 从 JSON 迁移为关联表）
+model Label {
+  id   String @id @default(cuid())
+  name String @unique
+
+  students StudentLabel[]
+}
+
+model StudentLabel {
+  studentId String
+  labelId   String
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  label   Label   @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, labelId])
+  @@index([studentId])
+  @@index([labelId])
+}
+
 // 1. 学生基础档案
 model Student {
   id         String   @id @default(cuid())
@@ -31,11 +51,11 @@ model Student {
   classId    String
   studentId  String   @unique
   gender     String   // "男" | "女"
-  labels     String   @default("[]") // JSON array, e.g. ["#逻辑强","#敏感"]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   class           Class             @relation(fields: [classId], references: [id])
+  studentLabels   StudentLabel[]
   sessionMetrics  SessionMetric[]
   events          Event[]
   communications  Communication[]
