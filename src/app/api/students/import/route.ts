@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       errors: errors.slice(0, 10), // Only return first 10 errors
     });
   } catch (error) {
-    console.error("POST /api/students/import error:", error);
+    console.error("[/api/students/import] error:", error);
     return NextResponse.json({ error: "导入失败，请检查文件格式" }, { status: 500 });
   }
 }

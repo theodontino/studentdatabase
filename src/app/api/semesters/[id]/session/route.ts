@@ -78,7 +78,7 @@ export async function POST(
     await recalculateScoreD(semesterId, today);
 
     // v0.11: log session creation
-    logAction({
+    void logAction({
       action: "session.created",
       targetType: "Session",
       targetId: session.id,
@@ -118,7 +118,7 @@ export async function DELETE(
     const today = new Date().toISOString().split("T")[0];
 
     // v0.11: log session deletion
-    logAction({
+    void logAction({
       action: "session.deleted",
       targetType: "Session",
       targetId: session.id,

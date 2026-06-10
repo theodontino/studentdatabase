@@ -16,7 +16,7 @@ export async function GET() {
       }))
     );
   } catch (error) {
-    console.error("GET /api/semesters error:", error);
+    console.error("[/api/semesters] error:", error);
     return NextResponse.json({ error: "获取学期列表失败" }, { status: 500 });
   }
 }
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json(semester, { status: 201 });
   } catch (error) {
-    console.error("POST /api/semesters error:", error);
+    console.error("[/api/semesters] error:", error);
     return NextResponse.json({ error: "创建学期失败" }, { status: 500 });
   }
 }

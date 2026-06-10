@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("POST /api/report/feedback-batch error:", error);
+    console.error("[/api/report/feedback-batch] error:", error);
     return NextResponse.json({ error: "批量生成失败" }, { status: 500 });
   }
 }

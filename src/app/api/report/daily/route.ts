@@ -70,7 +70,7 @@ ${studentLines.join("\n")}
 
     return NextResponse.json({ report, sessionCode, className, date: session.date, studentCount: students.length });
   } catch (error) {
-    console.error("POST /api/report/daily error:", error);
+    console.error("[/api/report/daily] error:", error);
     return NextResponse.json({ error: "生成日报失败" }, { status: 500 });
   }
 }

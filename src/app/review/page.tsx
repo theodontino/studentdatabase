@@ -55,7 +55,7 @@ export default function ReviewPage() {
   function startEdit(draft: Draft) {
     setEdits((prev) => ({
       ...prev,
-      [draft.id]: JSON.parse(JSON.stringify(draft.parsedResult)),
+      [draft.id]: structuredClone(draft.parsedResult),
     }));
     setExpandedId(draft.id);
   }

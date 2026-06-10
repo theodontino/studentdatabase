@@ -83,7 +83,7 @@ export async function reviewParsed(rawText: string, parsedResult: ParseResult): 
 }
 
 /**
- * v0.5: Fuzzy-match LLM-returned name to exact DB student name.
+ * Fuzzy-match LLM-returned name to exact DB student name.
  */
 export function fuzzyMatchName(llmName: string, candidates: string[]): string | null {
   const input = llmName.trim();

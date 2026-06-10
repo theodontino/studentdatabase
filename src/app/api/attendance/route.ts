@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(records);
   } catch (error) {
-    console.error("GET /api/attendance error:", error);
+    console.error("[/api/attendance] error:", error);
     return NextResponse.json({ error: "获取考勤失败" }, { status: 500 });
   }
 }
@@ -94,7 +94,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("PUT /api/attendance error:", error);
+    console.error("[/api/attendance] error:", error);
     return NextResponse.json({ error: "更新考勤失败" }, { status: 500 });
   }
 }

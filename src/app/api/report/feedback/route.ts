@@ -76,7 +76,7 @@ ${context}
 
     return NextResponse.json({ feedback: resp.choices[0]?.message?.content?.trim() || "" });
   } catch (error) {
-    console.error("POST /api/report/feedback error:", error);
+    console.error("[/api/report/feedback] error:", error);
     return NextResponse.json({ error: "生成反馈失败" }, { status: 500 });
   }
 }

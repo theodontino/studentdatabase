@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       createdAt: draft.createdAt,
     });
   } catch (error) {
-    console.error("POST /api/input/parse error:", error);
+    console.error("[/api/input/parse] error:", error);
     return NextResponse.json({ error: "LLM 解析失败，请稍后重试" }, { status: 500 });
   }
 }

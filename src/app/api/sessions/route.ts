@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       }))
     );
   } catch (error) {
-    console.error("GET /api/sessions error:", error);
+    console.error("[/api/sessions] error:", error);
     return NextResponse.json({ error: "获取课次列表失败" }, { status: 500 });
   }
 }

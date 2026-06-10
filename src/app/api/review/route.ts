@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       }))
     );
   } catch (error) {
-    console.error("GET /api/review error:", error);
+    console.error("[/api/review] error:", error);
     return NextResponse.json({ error: "获取草稿列表失败" }, { status: 500 });
   }
 }
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
           if (existing) await archiveMetricBeforeUpdate(existing.id);
           await prisma.sessionMetric.upsert({
             where: { studentId_sessionId: { studentId: student.id, sessionId } },
-            create: { studentId: student.id, date: today, sessionId, scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3, operator: "nl-review" },
+            create: { studentId: student.id, date: today, sessionId, scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3, operator: "nlReview" },
             update: { scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3 },
           });
         } else {
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
             });
           } else {
             await prisma.sessionMetric.create({
-              data: { studentId: student.id, date: today, sessionId: null, scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3, operator: "nl-review" },
+              data: { studentId: student.id, date: today, sessionId: null, scoreA: stu.scores.A ?? 3, scoreB: stu.scores.B ?? 3, scoreC: stu.scores.C ?? 3, operator: "nlReview" },
             });
           }
         }
@@ -146,12 +146,12 @@ export async function POST(request: NextRequest) {
       }
       // v0.11: log NL review score write
       if (stu.scores && Object.values(stu.scores).some((v) => v !== null)) {
-        logAction({
+        void logAction({
           action: "score.updated",
           targetType: "Student",
           targetId: student.id,
           targetName: student.name,
-          detail: { ...stu.scores, operator: "nl-review", sessionCode: draft.sessionCode },
+          detail: { ...stu.scores, operator: "nlReview", sessionCode: draft.sessionCode },
         });
       }
     }
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       ...(warnings.length > 0 && { warnings }),
     });
   } catch (error) {
-    console.error("POST /api/review error:", error);
+    console.error("[/api/review] error:", error);
     return NextResponse.json({ error: "操作失败" }, { status: 500 });
   }
 }

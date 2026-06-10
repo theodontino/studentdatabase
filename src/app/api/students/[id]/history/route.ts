@@ -14,7 +14,7 @@ export async function GET(
     });
     return NextResponse.json(history);
   } catch (error) {
-    console.error("GET /api/students/[id]/history error:", error);
+    console.error("[/api/students/[id]/history] error:", error);
     return NextResponse.json({ error: "获取历史失败" }, { status: 500 });
   }
 }

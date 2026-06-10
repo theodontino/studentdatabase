@@ -17,7 +17,7 @@ export async function GET() {
       }))
     );
   } catch (error) {
-    console.error("GET /api/students error:", error);
+    console.error("[/api/students] error:", error);
     return NextResponse.json({ error: "获取学生列表失败" }, { status: 500 });
   }
 }
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     if (error?.code === "P2002") {
       return NextResponse.json({ error: "学号已存在" }, { status: 409 });
     }
-    console.error("POST /api/students error:", error);
+    console.error("[/api/students] error:", error);
     return NextResponse.json({ error: "创建学生失败" }, { status: 500 });
   }
 }

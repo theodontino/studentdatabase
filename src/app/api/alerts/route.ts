@@ -237,7 +237,7 @@ export async function GET() {
       yellowCount,
     });
   } catch (error) {
-    console.error("GET /api/alerts error:", error);
+    console.error("[/api/alerts] error:", error);
     return NextResponse.json({ error: "获取数据失败" }, { status: 500 });
   }
 }

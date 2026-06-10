@@ -7,6 +7,13 @@ datasource db {
   provider = "sqlite"
 }
 
+enum Operator {
+  quickScore @map("quick-score")
+  nlReview   @map("nl-review")
+  teacher
+  system
+}
+
 // 0. 班级（v0.10: 独立表，替换 Student.class / ClassSession.class 自由字符串）
 model Class {
   id    String @id @default(cuid())
@@ -44,7 +51,7 @@ model SessionMetric {
   scoreB    Int      // 0-5
   scoreC    Int      // 0-5
   scoreD    Int      @default(3) // 0-5，考勤自动计算
-  operator  String   // "quick-score" | "nl-review" | "teacher" | "system"
+  operator  Operator // v0.12: Prisma enum
   sessionId String?  // 关联课次（可空，NL输入等无课次场景为null）
   createdAt DateTime @default(now())
 
@@ -64,10 +71,13 @@ model SessionMetricHistory {
   scoreB      Int
   scoreC      Int
   scoreD      Int
-  operator    String
+  operator    Operator // v0.12: Prisma enum
   sessionId   String?
   archivedAt  DateTime @default(now())
   changeType  String   // "update" | "delete"
+
+  @@index([studentId])
+  @@index([metricId])
 }
 
 // 3. 关键事件记录（绑定课次，日期从 ClassSession.date 获取）

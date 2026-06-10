@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       hasMore: offset + limit < total,
     });
   } catch (error) {
-    console.error("GET /api/system/logs error:", error);
+    console.error("[/api/system/logs] error:", error);
     return NextResponse.json({ error: "获取日志失败" }, { status: 500 });
   }
 }

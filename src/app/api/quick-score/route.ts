@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
       scores: result,
     });
   } catch (error) {
-    console.error("GET /api/quick-score error:", error);
+    console.error("[/api/quick-score] error:", error);
     return NextResponse.json({ error: "获取评分数据失败" }, { status: 500 });
   }
 }
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         if (existing) await archiveMetricBeforeUpdate(existing.id);
         await prisma.sessionMetric.upsert({
           where: { studentId_sessionId: { studentId: entry.studentId, sessionId } },
-          create: { studentId: entry.studentId, date: entry.date, sessionId, scoreA: a, scoreB: b, scoreC: c, operator: "quick-score" },
+          create: { studentId: entry.studentId, date: entry.date, sessionId, scoreA: a, scoreB: b, scoreC: c, operator: "quickScore" },
           update: { scoreA: a, scoreB: b, scoreC: c },
         });
       } else {
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
           await prisma.sessionMetric.update({ where: { id: existing.id }, data: { scoreA: a, scoreB: b, scoreC: c } });
         } else {
           await prisma.sessionMetric.create({
-            data: { studentId: entry.studentId, date: entry.date, sessionId: null, scoreA: a, scoreB: b, scoreC: c, operator: "quick-score" },
+            data: { studentId: entry.studentId, date: entry.date, sessionId: null, scoreA: a, scoreB: b, scoreC: c, operator: "quickScore" },
           });
         }
       }
@@ -187,11 +187,11 @@ export async function POST(request: NextRequest) {
       }
       count++;
       // v0.11: log score update
-      logAction({
+      void logAction({
         action: "score.updated",
         targetType: "Student",
         targetId: entry.studentId,
-        detail: { scoreA: a, scoreB: b, scoreC: c, operator: "quick-score", sessionCode },
+        detail: { scoreA: a, scoreB: b, scoreC: c, operator: "quickScore", sessionCode },
       });
     }
 
@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, count, attUpdated });
   } catch (error) {
-    console.error("POST /api/quick-score error:", error);
+    console.error("[/api/quick-score] error:", error);
     return NextResponse.json({ error: "提交失败" }, { status: 500 });
   }
 }

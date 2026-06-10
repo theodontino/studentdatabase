@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 
 /**
- * v0.5: Archive current SessionMetric values to history before update.
+ * Archive current SessionMetric values to history before update.
  * Call this BEFORE updating a SessionMetric row.
  */
 export async function archiveMetricBeforeUpdate(metricId: string, changeType: "update" | "delete" = "update") {

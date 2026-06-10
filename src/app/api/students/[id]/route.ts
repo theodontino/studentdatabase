@@ -58,7 +58,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error("GET /api/students/[id] error:", error);
+    console.error("[/api/students/[id]] error:", error);
     return NextResponse.json({ error: "获取学生详情失败" }, { status: 500 });
   }
 }
@@ -108,7 +108,7 @@ export async function PUT(
     if (error?.code === "P2025") {
       return NextResponse.json({ error: "学生不存在" }, { status: 404 });
     }
-    console.error("PUT /api/students/[id] error:", error);
+    console.error("[/api/students/[id]] error:", error);
     return NextResponse.json({ error: "更新学生失败" }, { status: 500 });
   }
 }
@@ -124,7 +124,7 @@ export async function DELETE(
     const student = await prisma.student.findUnique({ where: { id }, select: { name: true, studentId: true } });
     await prisma.student.delete({ where: { id } });
     if (student) {
-      logAction({
+      void logAction({
         action: "student.deleted",
         targetType: "Student",
         targetId: id,
@@ -137,7 +137,7 @@ export async function DELETE(
     if (error?.code === "P2025") {
       return NextResponse.json({ error: "学生不存在" }, { status: 404 });
     }
-    console.error("DELETE /api/students/[id] error:", error);
+    console.error("[/api/students/[id]] error:", error);
     return NextResponse.json({ error: "删除学生失败" }, { status: 500 });
   }
 }
