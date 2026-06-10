@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { parseInput, reviewParsed, correctNames } from "@/lib/parser";
+import { parseInput, reviewParsed, correctNames, llmCallStream } from "@/lib/parser";
+import { SYSTEM_PROMPT } from "@/lib/prompts";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,11 +11,82 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "请输入文本内容" }, { status: 400 });
     }
 
+    // v0.13: SSE stream mode
+    const streamMode = new URL(request.url).searchParams.get("stream") === "true";
+
     // Get all students for entity matching
     const students = await prisma.student.findMany({
       select: { id: true, name: true },
     });
     const studentNames = students.map((s) => s.name);
+
+    // v0.13: SSE stream mode — send tokens as they arrive
+    if (streamMode) {
+      const userPrompt = `已知学生名单：${studentNames.join("、")}
+
+教师的输入文本：
+${rawText}
+
+请按照 System Prompt 的要求，分析文本并返回 JSON。`;
+
+      const encoder = new TextEncoder();
+      const sseStream = new ReadableStream({
+        async start(controller) {
+          try {
+            let content = "";
+            await llmCallStream([
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: userPrompt },
+            ], 0.3, (delta) => {
+              content += delta;
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "chunk", content: delta })}\n\n`));
+            });
+
+            // Parse JSON from LLM response
+            let cleaned = content.trim();
+            if (cleaned.startsWith("```")) {
+              cleaned = cleaned.replace(/```\w*\n?/, "").replace(/\n?```$/, "");
+            }
+            let parsedResult = JSON.parse(cleaned);
+            parsedResult = correctNames(parsedResult, studentNames);
+
+            const nameToId = new Map(students.map((s) => [s.name, s.id]));
+            const matchedStudentIds = parsedResult.students
+              .map((stu: any) => nameToId.get(stu.name) ?? null)
+              .filter(Boolean) as string[];
+
+            // Self-review
+            let reviewResult = null;
+            try { reviewResult = await reviewParsed(rawText, parsedResult); } catch {}
+
+            // Save draft
+            const draft = await prisma.draftRecord.create({
+              data: {
+                rawText,
+                parsedResult: JSON.stringify(parsedResult),
+                reviewResult: reviewResult ? JSON.stringify(reviewResult) : null,
+                status: "pending",
+                sessionCode: sessionCode || null,
+                studentId: matchedStudentIds[0] ?? null,
+              },
+            });
+
+            controller.enqueue(encoder.encode(
+              `data: ${JSON.stringify({ type: "result", draftId: draft.id, parsedResult, reviewResult })}\n\n`
+            ));
+            controller.close();
+          } catch (e: any) {
+            controller.enqueue(encoder.encode(
+              `data: ${JSON.stringify({ type: "error", message: e.message })}\n\n`
+            ));
+            controller.close();
+          }
+        },
+      });
+      return new NextResponse(sseStream, {
+        headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" },
+      });
+    }
 
     // Step 1: LLM parse
     let parsedResult = await parseInput(rawText, studentNames);

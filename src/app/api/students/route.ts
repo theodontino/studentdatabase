@@ -7,13 +7,36 @@ const studentInclude = {
   studentLabels: { include: { label: { select: { id: true, name: true } } } },
 };
 
-// GET /api/students - list all students
-export async function GET() {
+// GET /api/students - list all students  [?summary=true]
+export async function GET(request: NextRequest) {
   try {
+    const summary = new URL(request.url).searchParams.get("summary") === "true";
+
     const students = await prisma.student.findMany({
       orderBy: { createdAt: "desc" },
       include: studentInclude,
     });
+
+    let scores: Map<string, { scoreA: number; scoreB: number; scoreC: number; scoreD: number }> | null = null;
+
+    if (summary) {
+      const latestMetrics = await prisma.sessionMetric.groupBy({
+        by: ["studentId"],
+        _max: { createdAt: true },
+        where: { studentId: { in: students.map((s) => s.id) } },
+      });
+      const metricIds = latestMetrics
+        .map((m) => ({ studentId: m.studentId, createdAt: m._max.createdAt! }))
+        .filter((m) => m.createdAt);
+      if (metricIds.length > 0) {
+        const metrics = await prisma.sessionMetric.findMany({
+          where: { OR: metricIds.map((m) => ({ studentId: m.studentId, createdAt: m.createdAt })) },
+          select: { studentId: true, scoreA: true, scoreB: true, scoreC: true, scoreD: true },
+        });
+        scores = new Map(metrics.map((m) => [m.studentId, m]));
+      }
+    }
+
     return NextResponse.json(
       students.map((s) => ({
         ...s,
@@ -21,6 +44,9 @@ export async function GET() {
         classCode: s.class.code,
         labels: s.studentLabels.map((sl) => ({ id: sl.label.id, name: sl.label.name })),
         studentLabels: undefined,
+        ...(scores && {
+          scores: scores.get(s.id) ?? null,
+        }),
       }))
     );
   } catch (error) {

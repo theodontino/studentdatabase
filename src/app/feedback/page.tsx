@@ -19,6 +19,7 @@ export default function FeedbackWizardPage() {
   const [sessionCode, setSessionCode] = useState("");
   const [rawText, setRawText] = useState("");
   const [parsing, setParsing] = useState(false);
+  const [streamContent, setStreamContent] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -51,22 +52,45 @@ export default function FeedbackWizardPage() {
       .then(setSessions);
   }, [semesterId, className]);
 
-  // Step 1: parse NL input
+  // Step 1: parse NL input (SSE streaming)
   async function handleParse() {
     if (!rawText.trim()) { setError("请输入文本"); return; }
     setParsing(true); setError("");
     try {
-      const res = await fetch("/api/input/parse", {
+      const res = await fetch("/api/input/parse?stream=true", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rawText, sessionCode: sessionCode || undefined }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setDraftId(data.draftId);
-      setParsedResult(data.parsedResult);
-      setReviewResult(data.reviewResult);
-      setStep(2);
+      if (!res.ok) throw new Error((await res.json()).error);
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const msg = JSON.parse(line.slice(6));
+          switch (msg.type) {
+            case "chunk":
+              setStreamContent((prev) => prev + msg.content);
+              break;
+            case "result":
+              setDraftId(msg.draftId);
+              setParsedResult(msg.parsedResult);
+              setReviewResult(msg.reviewResult);
+              setStep(2);
+              break;
+            case "error":
+              throw new Error(msg.message);
+          }
+        }
+      }
     } catch (e: any) { setError(e.message); }
     finally { setParsing(false); }
   }
@@ -226,6 +250,12 @@ export default function FeedbackWizardPage() {
               {parsing ? "解析中..." : "① 解析 →"}
             </button>
           </div>
+
+          {parsing && streamContent && (
+            <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[200px] overflow-y-auto">
+              <p className="text-xs font-mono text-gray-500 whitespace-pre-wrap leading-relaxed">{streamContent}</p>
+            </div>
+          )}
         </div>
       )}
 

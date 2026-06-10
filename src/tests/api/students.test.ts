@@ -4,14 +4,16 @@ import { NextRequest } from "next/server";
 
 describe("/api/students", () => {
   it("GET returns 200 with array", async () => {
-    const res = await GET();
+    const req = new NextRequest("http://localhost:3000/api/students");
+    const res = await GET(req);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body)).toBe(true);
   });
 
   it("GET returns students with name/class/studentId", async () => {
-    const res = await GET();
+    const req = new NextRequest("http://localhost:3000/api/students");
+    const res = await GET(req);
     const body = await res.json();
     expect(body.length).toBeGreaterThan(0);
     expect(body[0]).toHaveProperty("name");

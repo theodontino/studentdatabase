@@ -52,6 +52,40 @@ async function llmCall(
   throw lastErr || new Error("LLM failed after retries");
 }
 
+/** v0.13: stream LLM call — calls onChunk for each token delta */
+export async function llmCallStream(
+  messages: { role: string; content: string }[],
+  temperature: number,
+  onChunk: (delta: string) => void,
+  maxRetries = 2
+): Promise<string> {
+  const client = createLLMClient();
+  const model = getLLMModel();
+  let lastErr: any;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const stream = await client.chat.completions.create({
+        model, messages: messages as any, temperature, max_tokens: 16384, stream: true,
+      });
+      let content = "";
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content || "";
+        if (delta) { content += delta; onChunk(delta); }
+      }
+      if (!content.trim()) throw new Error("LLM returned empty response");
+      return content.trim();
+    } catch (e: any) {
+      lastErr = e;
+      if (attempt < maxRetries) {
+        console.warn(`[llmCall] retry ${attempt + 1}/${maxRetries + 1}:`, e.message);
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+  }
+  throw lastErr || new Error("LLM failed after retries");
+}
+
 /**
  * Call LLM to parse teacher's natural language input
  */
