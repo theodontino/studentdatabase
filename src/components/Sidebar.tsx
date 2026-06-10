@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/review", label: "复核", icon: "✅" },
   { href: "/report", label: "报告", icon: "📋" },
   { href: "/export", label: "导出", icon: "📥" },
+  { href: "/semesters", label: "学期", icon: "📅" },
 ];
 
 export default function Sidebar() {

@@ -8,19 +8,35 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || "pending";
+    const className = searchParams.get("className");
 
     const drafts = await prisma.draftRecord.findMany({
       where: { status },
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(
-      drafts.map((d) => ({
-        ...d,
-        parsedResult: JSON.parse(d.parsedResult),
-        reviewResult: d.reviewResult ? JSON.parse(d.reviewResult) : null,
-      }))
-    );
+    let result = drafts.map((d) => ({
+      ...d,
+      parsedResult: JSON.parse(d.parsedResult),
+      reviewResult: d.reviewResult ? JSON.parse(d.reviewResult) : null,
+    }));
+
+    // v0.12: 按班级筛选
+    if (className) {
+      const sessions = await prisma.classSession.findMany({
+        where: {
+          OR: [
+            { class: { name: className } },
+            { class: { code: className } },
+          ],
+        },
+        select: { code: true },
+      });
+      const codes = new Set(sessions.map((s) => s.code));
+      result = result.filter((d) => d.sessionCode && codes.has(d.sessionCode));
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("[/api/review] error:", error);
     return NextResponse.json({ error: "获取草稿列表失败" }, { status: 500 });

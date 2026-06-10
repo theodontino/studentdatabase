@@ -32,17 +32,31 @@ export default function ReviewPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<"pending" | "confirmed" | "rejected">("pending");
+  const [filterClass, setFilterClass] = useState("");
+  const [classes, setClasses] = useState<string[]>([]);
 
   // Editable state
   const [edits, setEdits] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    fetchDrafts(filterStatus);
-  }, [filterStatus]);
+    // Load class list
+    fetch("/api/students")
+      .then((r) => r.json())
+      .then((students: { class: string }[]) =>
+        setClasses([...new Set(students.map((s) => s.class))])
+      )
+      .catch(() => {});
+  }, []);
 
-  async function fetchDrafts(status: string) {
+  useEffect(() => {
+    fetchDrafts(filterStatus, filterClass);
+  }, [filterStatus, filterClass]);
+
+  async function fetchDrafts(status: string, className?: string) {
     try {
-      const res = await fetch(`/api/review?status=${status}`);
+      const params = new URLSearchParams({ status });
+      if (className) params.set("className", className);
+      const res = await fetch(`/api/review?${params}`);
       const data = await res.json();
       setDrafts(data);
     } catch (err) {
@@ -118,7 +132,7 @@ export default function ReviewPage() {
         alert("⚠ 注意：\n" + data.warnings.join("\n"));
       }
 
-      fetchDrafts(filterStatus);
+      fetchDrafts(filterStatus, filterClass);
       setExpandedId(null);
     } catch (err: any) {
       alert(err.message);
@@ -159,8 +173,8 @@ export default function ReviewPage() {
         审核 LLM 生成的草案，确认后写入数据库。
       </p>
 
-      {/* v0.5: 状态筛选标签 */}
-      <div className="flex gap-2 mb-6">
+      {/* 筛选栏 */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
         {(["pending", "confirmed", "rejected"] as const).map((s) => (
           <button
             key={s}
@@ -174,6 +188,18 @@ export default function ReviewPage() {
             {s === "pending" ? "待复核" : s === "confirmed" ? "已确认" : "已放弃"}
           </button>
         ))}
+        {/* v0.12: 按班级筛选 */}
+        <span className="text-xs text-gray-400 ml-auto">班级</span>
+        <select
+          value={filterClass}
+          onChange={(e) => setFilterClass(e.target.value)}
+          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none"
+        >
+          <option value="">全部</option>
+          {classes.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
       </div>
 
       {loading && (

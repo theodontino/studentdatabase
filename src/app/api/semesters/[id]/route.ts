@@ -1,6 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// GET /api/semesters/[id] - semester detail with session breakdown
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const semester = await prisma.semester.findUnique({
+      where: { id },
+      include: {
+        sessions: {
+          orderBy: { date: "desc" },
+          include: {
+            _count: { select: { attendances: true } },
+            class: { select: { code: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!semester) {
+      return NextResponse.json({ error: "学期不存在" }, { status: 404 });
+    }
+
+    const totalStudents = await prisma.student.count();
+    const totalSessions = semester.sessions.length;
+    const attendances = await prisma.attendance.count({
+      where: { session: { semesterId: id } },
+    });
+
+    return NextResponse.json({
+      ...semester,
+      sessionCount: totalSessions,
+      totalStudents,
+      attendances,
+    });
+  } catch (error) {
+    console.error("[/api/semesters/[id]] error:", error);
+    return NextResponse.json({ error: "获取学期详情失败" }, { status: 500 });
+  }
+}
+
 // PUT /api/semesters/[id] - update semester
 export async function PUT(
   request: NextRequest,
