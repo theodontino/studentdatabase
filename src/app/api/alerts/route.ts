@@ -25,6 +25,7 @@ export async function GET() {
     }
 
     // ── N+1 优化：批量查询 metrics，应用层按 student 分组取 top 3 ──
+    // 预警基于学生最新一条评分记录 (createdAt DESC)，不保证与当前课次对齐
     const allIds = students.map((s) => s.id);
     const allMetrics = await prisma.sessionMetric.findMany({
       where: { studentId: { in: allIds } },
