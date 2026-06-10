@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Chem-Track AI
 
-## Getting Started
+高中化学教师 Web 智能学生追踪系统。
 
-First, run the development server:
+**核心工作流**：`NL 输入 → LLM 解析 → LLM 自审 → 教师复核 → 写入数据库`
+
+## 快速启动
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd chem-track-ai
+npm install
+npm run db:seed
+npm run dev        # → http://localhost:3000
+npm test           # 48 test cases
+npx tsc --noEmit   # 0 errors
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 技术栈
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **框架**: Next.js 16 (App Router)
+- **ORM**: Prisma 7 + libsql (SQLite)
+- **LLM**: DeepSeek V4 Flash (OpenAI SDK)
+- **测试**: vitest (48 例), supertest (15 路由冒烟)
+- **样式**: Tailwind CSS 4
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 功能
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| 模块 | 功能 |
+|------|------|
+| 仪表盘 | 班级/学生概览、四维均分进度条、预警系统（红/黄分级） |
+| 学生管理 | 按班级分组/折叠、搜索、标签、评分预览、Excel 导入 |
+| 快速评分 | 卡片评分、考勤勾选、批量设置 |
+| NL 录入 | 自然语言 → LLM 解析 → 草案（SSE 流式），含姓名纠错 |
+| 复核中心 | 草案审核、分数修改、按班级筛选、确认/放弃 |
+| 一键反馈 | 4 步向导：输入→确认→反馈→导出（串联简化流程） |
+| 报告生成 | 班级日报、单人家校反馈、批量 SSE 流式反馈 |
+| 数据导出 | 5 Sheet Excel：档案/指标/事件/沟通/考勤 |
+| 学期管理 | 学期列表/详情、课次创建/删除/排序 |
+| 操作日志 | SystemLog 面板，保留 90 天 |
