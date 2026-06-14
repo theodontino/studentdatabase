@@ -8,6 +8,9 @@
 | `ARCHITECTURE.md` | 代码如何分层，稳定业务规则在哪里？ |
 | `OPERATIONS.md` | 如何启动、迁移、备份、恢复和验证？ |
 | `DECISIONS.md` | 为什么做出少数重要且长期有效的设计选择？ |
-| `generated/` | 当前 Schema、路由和 ER 图是什么？ |
+| [`generated/SCHEMA.md`](generated/SCHEMA.md) | 当前 Schema 字段和 ER 关系是什么？ |
+| [`generated/ROUTES.md`](generated/ROUTES.md) | 当前 API 路由和 HTTP 方法是什么？ |
 
 以下内容不进入长期文档：当前版本进度、功能完成百分比、测试数量、文件数量、Bug 列表和下一版本计划。
+
+Schema 或 API 路由变化后运行 `npm run docs:generate`。CI 或提交前可运行 `npm run docs:check` 检查生成物是否过期。
