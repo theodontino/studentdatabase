@@ -9,7 +9,10 @@
     "lint": "eslint",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:reset": "npx prisma migrate reset --force && npm run db:seed",
-    "db:archive": "npx tsx scripts/archive-and-reset.ts",
+    "db:backup": "npx tsx scripts/db-backup.ts",
+    "db:archive": "npm run db:backup",
+    "db:verify-backup": "npx tsx scripts/db-verify-backup.ts",
+    "db:restore": "npx tsx scripts/db-restore.ts",
     "db:maintain": "npx tsx scripts/db-maintain.ts",
     "test": "vitest run",
     "test:watch": "vitest"
