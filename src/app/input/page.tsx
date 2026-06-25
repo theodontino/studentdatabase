@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import SemesterPicker from "@/components/SemesterPicker";
 import { DIM_LABEL } from "@/lib/constants";
@@ -26,6 +26,13 @@ export default function InputPage() {
   const [selectedSemesterId, setSelectedSemesterId] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedSessionCode, setSelectedSessionCode] = useState("");
+
+  useEffect(() => {
+    const draft = sessionStorage.getItem("chem-track:nl-input-draft");
+    if (!draft) return;
+    setRawText(draft);
+    sessionStorage.removeItem("chem-track:nl-input-draft");
+  }, []);
 
   async function handleSubmit() {
     if (!rawText.trim()) return;

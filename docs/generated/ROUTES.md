@@ -6,6 +6,9 @@
 |---|---|
 | `/api/alerts` | `GET` |
 | `/api/attendance` | `GET`, `PUT` |
+| `/api/diarize/tasks/[id]/retry` | `POST` |
+| `/api/diarize/tasks/[id]` | `DELETE`, `GET` |
+| `/api/diarize/tasks` | `GET`, `POST` |
 | `/api/export` | `POST` |
 | `/api/history` | `DELETE`, `GET`, `POST` |
 | `/api/input/parse` | `POST` |
@@ -18,6 +21,7 @@
 | `/api/semesters/[id]/session` | `DELETE`, `POST` |
 | `/api/semesters` | `GET`, `POST` |
 | `/api/sessions` | `GET` |
+| `/api/settings/llm` | `DELETE`, `GET`, `PATCH`, `POST`, `PUT` |
 | `/api/students/[id]/history` | `GET` |
 | `/api/students/[id]` | `DELETE`, `GET`, `PUT` |
 | `/api/students/import` | `POST` |

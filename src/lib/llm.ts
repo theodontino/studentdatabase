@@ -1,21 +1,21 @@
 import OpenAI from "openai";
+import { getEffectiveLLMSettings } from "./llm-settings";
 
 /** Creates the configured OpenAI-compatible client and fails fast without a key. */
 export function createLLMClient() {
-  const apiKey = process.env.LLM_API_KEY;
-  const baseURL = process.env.LLM_API_BASE_URL || "https://api.openai.com/v1";
+  const { apiKey, apiBaseUrl } = getEffectiveLLMSettings();
 
   if (!apiKey) {
-    throw new Error("LLM_API_KEY is not set in environment variables");
+    throw new Error("LLM API Key 未设置，请在系统设置中配置");
   }
 
   return new OpenAI({
     apiKey,
-    baseURL,
+    baseURL: apiBaseUrl,
   });
 }
 
 /** Returns the configured model name without performing a network request. */
 export function getLLMModel(): string {
-  return process.env.LLM_MODEL || "gpt-4o-mini";
+  return getEffectiveLLMSettings().model;
 }

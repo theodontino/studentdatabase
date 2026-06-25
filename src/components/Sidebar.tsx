@@ -16,6 +16,7 @@ const GROUPS: NavGroup[] = [
     icon: "📝",
     children: [
       { href: "/quick-score", label: "快速评分", icon: "⚡" },
+      { href: "/diarize", label: "录音转写", icon: "🎙️" },
       { href: "/input", label: "NL 录入", icon: "✏️" },
       { href: "/review", label: "复核", icon: "✅" },
     ],
@@ -34,6 +35,7 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: "/students", label: "学生管理", icon: "👤" },
       { href: "/semesters", label: "学期", icon: "📅" },
+      { href: "/settings", label: "系统设置", icon: "⚙️" },
     ],
   },
 ];
