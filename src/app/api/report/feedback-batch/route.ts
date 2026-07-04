@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createLLMClient, getLLMModel } from "@/lib/llm";
+import { buildFeedbackContext, type FeedbackContextPreview } from "@/services/feedback-context-service";
 import * as XLSX from "xlsx";
 
 type HistoryModule = "feedback" | "report";
-interface FeedbackCard { id: string; name: string; labels: string[]; feedback: string; }
+interface FeedbackCard {
+  id: string;
+  name: string;
+  labels: string[];
+  feedback: string;
+  contextPreview?: FeedbackContextPreview;
+}
 interface FeedbackState {
   kind: "batch";
   semesterId: string;
@@ -88,44 +95,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ cached: true, ...cached.state });
     }
 
-    const session = await prisma.classSession.findUnique({
-      where: { code: sessionCode },
-      include: { class: { select: { name: true, code: true } } },
-    });
-    if (!session) return NextResponse.json({ error: "课次不存在" }, { status: 404 });
-    const className = session.class?.name ?? session.class?.code;
-    if (!className || !session.classId) return NextResponse.json({ error: "该课次未关联班级" }, { status: 400 });
-
-    const students = await prisma.student.findMany({
-      where: { classId: session.classId },
-      select: { id: true, name: true, studentLabels: { include: { label: { select: { name: true } } } } },
-      orderBy: { studentId: "asc" },
-    });
-    if (students.length === 0) return NextResponse.json({ error: "该班级无学生" }, { status: 404 });
-
-    const studentIds = students.map((student) => student.id);
-    const [metrics, attendances, events] = await Promise.all([
-      prisma.sessionMetric.findMany({ where: { sessionId: session.id, studentId: { in: studentIds } } }),
-      prisma.attendance.findMany({ where: { sessionId: session.id, studentId: { in: studentIds } } }),
-      prisma.event.findMany({ where: { sessionId: session.id, studentId: { in: studentIds } } }),
-    ]);
-    const metricMap = new Map(metrics.map((metric) => [metric.studentId, metric]));
-    const attendanceMap = new Map(attendances.map((attendance) => [attendance.studentId, attendance.present]));
-    const eventsByStudent = new Map<string, string[]>();
-    for (const event of events) {
-      const list = eventsByStudent.get(event.studentId) ?? [];
-      list.push(event.description);
-      eventsByStudent.set(event.studentId, list);
-    }
+    const feedbackContext = await buildFeedbackContext(prisma, sessionCode);
+    const contextByStudent = new Map(feedbackContext.students.map((student) => [student.id, student]));
 
     const client = createLLMClient();
     const model = getLLMModel();
-    const total = students.length;
-    const cards: FeedbackCard[] = students.map((student) => ({
+    const total = feedbackContext.total;
+    const cards: FeedbackCard[] = feedbackContext.students.map((student) => ({
       id: student.id,
       name: student.name,
-      labels: student.studentLabels.map((item) => item.label.name),
+      labels: student.labels,
       feedback: "",
+      contextPreview: student.preview,
     }));
     const encoder = new TextEncoder();
 
@@ -135,14 +116,8 @@ export async function POST(request: NextRequest) {
           controller.enqueue(encoder.encode(JSON.stringify({ type: "init", students: cards, total }) + "\n"));
 
           for (const card of cards) {
-            const metric = metricMap.get(card.id);
-            const present = attendanceMap.get(card.id);
-            const eventText = (eventsByStudent.get(card.id) ?? []).join("；") || "无";
-            const context =
-              `A:${metric?.scoreA ?? "—"} B:${metric?.scoreB ?? "—"} C:${metric?.scoreC ?? "—"} D:${metric?.scoreD ?? "—"} ` +
-              `出勤:${present === undefined ? "无" : present ? "到" : "缺"} ` +
-              (eventText !== "无" ? `事件:${eventText}` : "");
-            const prompt = `${card.name}，${session.date}第${session.semesterNumber}次课。${context}\n\n请为${card.name}生成50-80字家校反馈，只反馈该生本人表现，不比较、不提其他学生姓名。温和客观，直接返回。`;
+            const studentContext = contextByStudent.get(card.id);
+            const prompt = `${studentContext?.promptContext ?? card.name}\n\n请为${card.name}生成50-80字家校反馈，只反馈该生本人表现，不比较、不提其他学生姓名。温和客观，直接返回。`;
 
             try {
               const response = await client.chat.completions.create({
@@ -165,14 +140,21 @@ export async function POST(request: NextRequest) {
             }) + "\n"));
           }
 
-          const state: FeedbackState = { kind: "batch", semesterId: session.semesterId, sessionCode, className, students: cards, total };
+          const state: FeedbackState = {
+            kind: "batch",
+            semesterId: feedbackContext.session.semesterId,
+            sessionCode,
+            className: feedbackContext.className,
+            students: cards,
+            total,
+          };
           const buffer = buildWorkbook(cards);
           cache.set(key, { buffer, timestamp: Date.now(), state });
           await prisma.workHistory.create({
             data: {
               module: historyModule,
               key: sessionCode,
-              title: `${className} ${sessionCode} 批量反馈`,
+              title: `${feedbackContext.className} ${sessionCode} 批量反馈`,
               state: JSON.stringify(state),
             },
           });

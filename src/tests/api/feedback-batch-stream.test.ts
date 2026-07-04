@@ -36,6 +36,49 @@ vi.mock("@/lib/llm", () => ({
   getLLMModel: () => "test-model",
 }));
 
+vi.mock("@/services/feedback-context-service", () => ({
+  buildFeedbackContext: vi.fn().mockResolvedValue({
+    session: {
+      id: "session-1",
+      code: "VITEST-STREAM",
+      date: "2026-06-14",
+      semesterId: "semester-1",
+      semesterNumber: 1,
+      classId: "class-1",
+    },
+    className: "测试班",
+    total: 2,
+    students: [
+      {
+        id: "student-1",
+        name: "学生甲",
+        studentId: "S1",
+        labels: ["#稳定"],
+        promptContext: "学生甲上下文：学生标签：#稳定\n近期趋势：A4/B4/C4/D5\n近期家校沟通：与母亲：希望多强调进步",
+        preview: {
+          today: ["学习&测验 4分"],
+          trend: "A4/B4/C4/D5",
+          communications: ["与母亲：希望多强调进步"],
+          labels: ["#稳定"],
+        },
+      },
+      {
+        id: "student-2",
+        name: "学生乙",
+        studentId: "S2",
+        labels: [],
+        promptContext: "学生乙上下文：近期趋势：暂无近期评分趋势\n近期家校沟通：无",
+        preview: {
+          today: ["学习&测验 无记录"],
+          trend: "暂无近期评分趋势",
+          communications: [],
+          labels: [],
+        },
+      },
+    ],
+  }),
+}));
+
 import { POST } from "@/app/api/report/feedback-batch/route";
 
 describe("feedback batch NDJSON stream", () => {
@@ -58,6 +101,13 @@ describe("feedback batch NDJSON stream", () => {
     const events = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
 
     expect(events.map((event) => event.type)).toEqual(["init", "progress", "progress", "done"]);
+    expect(events[0].students[0]).toMatchObject({
+      id: "student-1",
+      contextPreview: expect.objectContaining({
+        trend: "A4/B4/C4/D5",
+        communications: ["与母亲：希望多强调进步"],
+      }),
+    });
     expect(events[1]).toMatchObject({ studentId: "student-1", name: "学生甲", feedback: "甲反馈" });
     expect(events[2]).toMatchObject({ studentId: "student-2", name: "学生乙", feedback: "乙反馈" });
     expect(events[3].students).toEqual([
@@ -66,6 +116,16 @@ describe("feedback batch NDJSON stream", () => {
     ]);
     expect(mocks.historyCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ module: "feedback", key: "VITEST-STREAM" }),
+    }));
+    expect(mocks.completionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [expect.objectContaining({
+        content: expect.stringContaining("近期家校沟通"),
+      })],
+    }));
+    expect(mocks.completionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [expect.objectContaining({
+        content: expect.stringContaining("#稳定"),
+      })],
     }));
 
     const cached = await POST(request());

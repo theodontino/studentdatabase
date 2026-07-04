@@ -6,6 +6,24 @@ import { readSSEStream } from "@/lib/sse";
 import WorkHistoryButton from "@/components/WorkHistoryButton";
 
 interface FeedbackCard { id: string; name: string; labels: string[]; feedback: string; }
+interface FeedbackContextPreview {
+  today: string[];
+  trend: string;
+  communications: string[];
+  labels: string[];
+}
+interface FeedbackContextStudent {
+  id: string;
+  name: string;
+  studentId: string;
+  labels: string[];
+  preview: FeedbackContextPreview;
+}
+interface FeedbackContextResponse {
+  className: string;
+  total: number;
+  students: FeedbackContextStudent[];
+}
 interface FeedbackHistoryState {
   kind: "batch";
   semesterId: string;
@@ -42,6 +60,9 @@ export default function FeedbackWizardPage() {
   const [feedbackCards, setFeedbackCards] = useState<FeedbackCard[]>([]);
   const [feedbackTotal, setFeedbackTotal] = useState(0);
   const [feedbackDone, setFeedbackDone] = useState(0);
+  const [contextStudents, setContextStudents] = useState<FeedbackContextStudent[]>([]);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [contextError, setContextError] = useState("");
 
   useEffect(() => {
     const draft = sessionStorage.getItem("chem-track:feedback-draft");
@@ -50,6 +71,33 @@ export default function FeedbackWizardPage() {
     setParseStatus("已从录音转写载入课后回顾。");
     sessionStorage.removeItem("chem-track:feedback-draft");
   }, []);
+
+  useEffect(() => {
+    if (step !== 3 || !sessionCode) return;
+    let cancelled = false;
+
+    async function loadFeedbackContext() {
+      setContextLoading(true);
+      setContextError("");
+      try {
+        const res = await fetch(`/api/report/feedback-context?sessionCode=${encodeURIComponent(sessionCode)}`);
+        const data: FeedbackContextResponse | { error?: string } = await res.json();
+        if (cancelled) return;
+        if (!res.ok) throw new Error((data as { error?: string }).error || "读取反馈上下文失败");
+        setContextStudents((data as FeedbackContextResponse).students || []);
+      } catch (e: any) {
+        if (!cancelled) {
+          setContextStudents([]);
+          setContextError(e.message || "读取反馈上下文失败");
+        }
+      } finally {
+        if (!cancelled) setContextLoading(false);
+      }
+    }
+
+    void loadFeedbackContext();
+    return () => { cancelled = true; };
+  }, [step, sessionCode]);
 
   function onSemIdChange(id: string) { setSemesterId(id); setClassName(""); setSessionCode(""); }
   function onClsChange(cls: string) { setClassName(cls); setSessionCode(""); }
@@ -176,6 +224,8 @@ export default function FeedbackWizardPage() {
     setFeedbackCards(state.students);
     setFeedbackTotal(state.total);
     setFeedbackDone(state.total);
+    setContextStudents([]);
+    setContextError("");
     setStep(4);
     setError("");
   }
@@ -366,6 +416,57 @@ export default function FeedbackWizardPage() {
       {step === 3 && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="font-semibold text-gray-800 mb-4">📋 生成家长反馈</h3>
+
+          <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <h4 className="text-sm font-semibold text-blue-900">生成前上下文预览</h4>
+                <p className="text-xs text-blue-700 mt-1">这里展示本次反馈会参考的今日表现、近期趋势、家校沟通和标签。</p>
+              </div>
+              {contextLoading && <span className="text-xs text-blue-600">读取中...</span>}
+            </div>
+
+            {contextError ? (
+              <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{contextError}</div>
+            ) : contextStudents.length === 0 ? (
+              <div className="text-sm text-blue-700">{contextLoading ? "正在整理上下文..." : "暂无可预览上下文"}</div>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {contextStudents.map((student) => (
+                  <div key={student.id} className="rounded-md border border-blue-100 bg-white p-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="font-semibold text-gray-800">{student.name}</span>
+                      {student.preview.labels.length > 0 ? student.preview.labels.map((label) => (
+                        <span key={label} className="rounded border border-blue-100 bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-700">{label}</span>
+                      )) : <span className="text-xs text-gray-400">暂无标签</span>}
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <div>
+                        <div className="text-xs font-medium text-gray-400 mb-1">今日表现</div>
+                        <ul className="space-y-0.5 text-gray-700">
+                          {student.preview.today.map((line) => <li key={line}>{line}</li>)}
+                        </ul>
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium text-gray-400 mb-1">近期趋势</div>
+                        <p className="text-gray-700 leading-6">{student.preview.trend}</p>
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-xs font-medium text-gray-400 mb-1">家校沟通</div>
+                      {student.preview.communications.length > 0 ? (
+                        <ul className="space-y-1 text-gray-700">
+                          {student.preview.communications.map((line) => <li key={line}>{line}</li>)}
+                        </ul>
+                      ) : (
+                        <p className="text-gray-400">暂无近期家校沟通</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {feedbackCards.length === 0 ? (
             <div className="text-center py-10">

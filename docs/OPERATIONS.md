@@ -84,3 +84,15 @@ Chem-Track 调用本地转写时默认使用纯转写模式，不输出说话人
 录音、上传音频、转写结果和运行日志保存在 `data/diarize/`。该目录是运行数据，已被 Git 忽略；数据库备份不会替代这些音频和中间文件的归档需求。
 
 浏览器现场录音依赖麦克风权限和浏览器 `MediaRecorder` 支持。权限被拒绝或浏览器不支持录音时，仍可上传已有音频文件。
+
+## WeComCatch 手动入口
+
+Chem-Track 通过固定 wrapper 调用本地 WeComCatch：
+
+```bash
+$HOME/.openclaw/skills/wecomcatch-archive/scripts/wecomcatch.sh
+```
+
+Web UI 只暴露状态、启动同步、同步状态和导出记录四类操作。同步不会自动运行；启动同步前应确认 Mac 已解锁，并理解企微会话切换可能改变未读状态。
+
+企微导出文本可以在系统设置中交给当前 LLM 配置生成 Chem-Track 候选 JSON。候选 JSON 必须先经过预览导入；只有用户确认写入时，才会调用导入服务写入 `Communication`，并在写入前自动备份数据库。

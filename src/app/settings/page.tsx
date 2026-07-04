@@ -60,6 +60,15 @@ interface WeComCandidatePath {
   modifiedAt: string;
 }
 
+interface WeComCatchResult {
+  command: string;
+  scriptPath: string;
+  stdout: string;
+  stderr: string;
+  parsed: unknown | null;
+  warning?: string;
+}
+
 type LLMProfileForm = Partial<LLMProfile> & {
   name: string;
   apiBaseUrl: string;
@@ -94,6 +103,11 @@ export default function SettingsPage() {
   const [wecomResult, setWecomResult] = useState<WeComImportResult | null>(null);
   const [wecomStatus, setWecomStatus] = useState("");
   const [wecomError, setWecomError] = useState("");
+  const [wecomCatchLoading, setWecomCatchLoading] = useState(false);
+  const [wecomCatchResult, setWecomCatchResult] = useState<WeComCatchResult | null>(null);
+  const [wecomCatchError, setWecomCatchError] = useState("");
+  const [wecomBridgeText, setWecomBridgeText] = useState("");
+  const [wecomBridgeLoading, setWecomBridgeLoading] = useState(false);
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -357,6 +371,63 @@ export default function SettingsPage() {
     }
   }
 
+  function formatWeComCatchOutput(result: WeComCatchResult | null) {
+    if (!result) return "";
+    if (result.parsed) return JSON.stringify(result.parsed, null, 2);
+    return [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  }
+
+  async function runWeComCatch(action: "status" | "sync-start" | "sync-status" | "export") {
+    if (action === "sync-start") {
+      const ok = confirm("企微同步可能切换会话并改变未读状态。请确认 Mac 已解锁，并且同步期间不要调整企微窗口。");
+      if (!ok) return;
+    }
+
+    setWecomCatchLoading(true);
+    setWecomCatchError("");
+    try {
+      const path = `/api/wecomcatch/${action}`;
+      const res = await fetch(path, { method: action === "status" || action === "sync-status" ? "GET" : "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "WeComCatch 操作失败");
+      setWecomCatchResult(data);
+      if (action === "export" && data.stdout) setWecomBridgeText(data.stdout);
+    } catch (e: any) {
+      setWecomCatchError(e.message);
+    } finally {
+      setWecomCatchLoading(false);
+    }
+  }
+
+  async function generateWeComBridge() {
+    if (!wecomBridgeText.trim()) {
+      setWecomError("请先粘贴企微导出文本，或点击 WeComCatch 导出后再生成候选 JSON");
+      return;
+    }
+
+    setWecomBridgeLoading(true);
+    setWecomStatus("");
+    setWecomError("");
+    try {
+      const res = await fetch("/api/wecom/bridge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceText: wecomBridgeText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "生成企微候选 JSON 失败");
+      setWecomJsonText(JSON.stringify(data.bridgeJson, null, 2));
+      setWecomJsonPath("");
+      setWecomFileName("LLM 生成的企微候选 JSON");
+      setWecomResult(null);
+      setWecomStatus("已生成企微候选 JSON，可以先预览导入。");
+    } catch (e: any) {
+      setWecomError(e.message);
+    } finally {
+      setWecomBridgeLoading(false);
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-6">
@@ -526,6 +597,89 @@ export default function SettingsPage() {
             >
               清除全部 Web 配置
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 bg-white border border-gray-200 rounded-lg p-6 space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-800">WeComCatch 手动同步</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              只通过固定 wrapper 脚本读取状态、启动同步和导出记录；不会自动同步企微。
+            </p>
+          </div>
+          <a href="/feedback" className="text-sm text-blue-600 hover:text-blue-700">去课后反馈工作台</a>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => runWeComCatch("status")}
+            disabled={wecomCatchLoading}
+            className="px-4 py-2 rounded-md border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            读取状态
+          </button>
+          <button
+            onClick={() => runWeComCatch("sync-start")}
+            disabled={wecomCatchLoading}
+            className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
+          >
+            启动同步
+          </button>
+          <button
+            onClick={() => runWeComCatch("sync-status")}
+            disabled={wecomCatchLoading}
+            className="px-4 py-2 rounded-md border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            同步进度
+          </button>
+          <button
+            onClick={() => runWeComCatch("export")}
+            disabled={wecomCatchLoading}
+            className="px-4 py-2 rounded-md border border-green-200 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+          >
+            导出记录
+          </button>
+        </div>
+
+        {wecomCatchError && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{wecomCatchError}</div>}
+        {wecomCatchResult?.warning && <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">{wecomCatchResult.warning}</div>}
+        {wecomCatchResult && (
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
+            <div className="bg-gray-50 px-3 py-2 text-xs text-gray-500">
+              {wecomCatchResult.command} · {wecomCatchResult.scriptPath}
+            </div>
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap p-3 text-xs text-gray-700">
+              {formatWeComCatchOutput(wecomCatchResult) || "命令已执行，无输出。"}
+            </pre>
+          </div>
+        )}
+
+        <div className="border-t border-gray-100 pt-5">
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">生成 Chem-Track 候选 JSON</h4>
+          <p className="text-xs text-gray-500 mb-3">
+            可粘贴 WeComCatch 导出内容或一段聊天记录，由当前 LLM 配置提取为家校沟通候选，再进入下面的预览导入。
+          </p>
+          <textarea
+            value={wecomBridgeText}
+            onChange={(e) => setWecomBridgeText(e.target.value)}
+            placeholder="粘贴企微导出内容或聊天记录。点击「导出记录」后，如果脚本返回文本，也会自动填入这里。"
+            className="w-full min-h-[120px] rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <div className="flex flex-wrap items-center gap-3 mt-3">
+            <button
+              onClick={generateWeComBridge}
+              disabled={wecomBridgeLoading || !wecomBridgeText.trim()}
+              className="px-4 py-2 rounded-md bg-amber-600 text-white text-sm font-medium disabled:opacity-50"
+            >
+              {wecomBridgeLoading ? "生成中..." : "生成候选 JSON"}
+            </button>
+            {wecomFileName && (
+              <span className="text-xs border border-blue-100 bg-blue-50 text-blue-700 rounded px-2 py-1">
+                当前候选：{wecomFileName}
+              </span>
+            )}
           </div>
         </div>
       </div>
