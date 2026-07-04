@@ -313,11 +313,17 @@ export default function DiarizePage() {
     router.push("/input");
   }
 
+  function sendToFeedback() {
+    if (!activeTask?.resultText) return;
+    sessionStorage.setItem("chem-track:feedback-draft", activeTask.resultText);
+    router.push("/feedback");
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-800">录音转写</h2>
-        <p className="text-sm text-gray-500 mt-1">把课堂录音转成纯文字稿，再送入 NL 录入复核。</p>
+        <p className="text-sm text-gray-500 mt-1">把课后回顾录音转成文字稿，再送入课后反馈工作台。</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5">
@@ -454,6 +460,7 @@ export default function DiarizePage() {
                   <div className="flex flex-wrap gap-3">
                     <button onClick={copyResult} className="px-3 py-2 rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">复制文字稿</button>
                     <button onClick={downloadResult} className="px-3 py-2 rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">下载 TXT</button>
+                    <button onClick={sendToFeedback} className="px-3 py-2 rounded-md bg-amber-600 text-white text-sm font-medium">送入课后反馈</button>
                     <button onClick={sendToInput} className="px-3 py-2 rounded-md bg-blue-600 text-white text-sm font-medium">送入 NL 录入</button>
                   </div>
                   <textarea

@@ -4,10 +4,31 @@ import { updateSessionAttendance, type AttendanceUpdate } from "@/services/atten
 import { ServiceError } from "@/services/service-error";
 
 // GET /api/attendance?sessionId=xxx - get attendance for a session
+// GET /api/attendance?studentId=xxx - get attendance history for a student
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get("sessionId");
+    const studentId = searchParams.get("studentId");
+
+    if (!sessionId && !studentId) {
+      return NextResponse.json({ error: "缺少 sessionId 或 studentId" }, { status: 400 });
+    }
+
+    if (studentId) {
+      const records = await prisma.attendance.findMany({
+        where: { studentId, ...(sessionId ? { sessionId } : {}) },
+        include: { session: { select: { date: true, semesterNumber: true, code: true } } },
+        orderBy: { createdAt: "desc" },
+      });
+
+      records.sort((a, b) => (
+        b.session.date.localeCompare(a.session.date)
+        || b.createdAt.getTime() - a.createdAt.getTime()
+      ));
+
+      return NextResponse.json(records);
+    }
 
     if (!sessionId) {
       return NextResponse.json({ error: "缺少 sessionId" }, { status: 400 });

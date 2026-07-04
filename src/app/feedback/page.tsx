@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SemesterPicker from "@/components/SemesterPicker";
 import { readSSEStream } from "@/lib/sse";
 import WorkHistoryButton from "@/components/WorkHistoryButton";
@@ -16,7 +16,7 @@ interface FeedbackHistoryState {
 }
 
 const STEPS = [
-  { num: 1, label: "输入" }, { num: 2, label: "确认" },
+  { num: 1, label: "回顾" }, { num: 2, label: "确认" },
   { num: 3, label: "反馈" }, { num: 4, label: "导出" },
 ];
 
@@ -42,6 +42,14 @@ export default function FeedbackWizardPage() {
   const [feedbackCards, setFeedbackCards] = useState<FeedbackCard[]>([]);
   const [feedbackTotal, setFeedbackTotal] = useState(0);
   const [feedbackDone, setFeedbackDone] = useState(0);
+
+  useEffect(() => {
+    const draft = sessionStorage.getItem("chem-track:feedback-draft");
+    if (!draft) return;
+    setRawText(draft);
+    setParseStatus("已从录音转写载入课后回顾。");
+    sessionStorage.removeItem("chem-track:feedback-draft");
+  }, []);
 
   function onSemIdChange(id: string) { setSemesterId(id); setClassName(""); setSessionCode(""); }
   function onClsChange(cls: string) { setClassName(cls); setSessionCode(""); }
@@ -175,7 +183,10 @@ export default function FeedbackWizardPage() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">🚀 一键反馈流程</h2>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">🚀 课后反馈工作台</h2>
+          <p className="text-sm text-gray-500 mt-1">选课次，放入老师课后回顾，确认后生成今晚可发的家长反馈。</p>
+        </div>
         <WorkHistoryButton<FeedbackHistoryState> module="feedback" onRestore={restoreHistory} />
       </div>
 
@@ -205,7 +216,19 @@ export default function FeedbackWizardPage() {
       {/* Step 1: Input */}
       {step === 1 && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-800 mb-4">✏️ 输入文本并选择课次</h3>
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h3 className="font-semibold text-gray-800">✏️ 课后回顾</h3>
+              <p className="text-xs text-gray-500 mt-1">只写和学生反馈有关的事实，系统会把未提及学生按缺勤补齐。</p>
+            </div>
+            <a href="/diarize" className="text-sm text-blue-600 hover:text-blue-700 shrink-0">去转写录音</a>
+          </div>
+
+          {parseStatus && !parsing && (
+            <div className="mb-4 rounded-lg border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700">
+              {parseStatus}
+            </div>
+          )}
 
           <div className="mb-4">
             <SemesterPicker
@@ -221,7 +244,7 @@ export default function FeedbackWizardPage() {
           <textarea
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
-            placeholder="输入教师观察，如：'今天张三氧化还原反应测验全对（A=5），李四上课走神（B=2），王五情绪低落...'"
+            placeholder="粘贴或从转写页送入课后回顾，如：今天是某班第几次课。张三听课状态不错，测验还可以，但作业订正不够主动。李四前半节有点走神，后半节跟上了，建议家长提醒复习氧化还原。"
             className="w-full border border-gray-300 rounded-lg p-4 text-sm min-h-[120px] outline-none focus:ring-2 focus:ring-blue-500 resize-y"
           />
 

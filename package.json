@@ -14,6 +14,7 @@
     "db:verify-backup": "npx tsx scripts/db-verify-backup.ts",
     "db:restore": "npx tsx scripts/db-restore.ts",
     "db:maintain": "npx tsx scripts/db-maintain.ts",
+    "import:wecom": "npx tsx scripts/import-wecom-communications.ts",
     "docs:generate": "node --import tsx scripts/generate-docs.ts",
     "docs:check": "node --import tsx scripts/generate-docs.ts --check",
     "test": "vitest run",

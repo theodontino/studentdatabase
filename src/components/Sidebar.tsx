@@ -90,7 +90,7 @@ export default function Sidebar() {
           }`}
         >
           <span className="text-lg">🚀</span>
-          <span>一键反馈</span>
+          <span>课后反馈</span>
         </Link>
 
         {/* Groups */}

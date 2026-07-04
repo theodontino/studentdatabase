@@ -23,6 +23,43 @@ interface LLMSettingsResponse {
   };
 }
 
+interface WeComImportPlanItem {
+  student: { id: string; name: string; studentId: string };
+  session: { id: string; code: string; date: string; semesterNumber: number };
+  source: { conversationId: string; conversationTitle: string };
+  occurredAt: string;
+  target: string;
+  summary: string;
+  duplicate: boolean;
+  binding: "explicit_session" | "first_class_session_fallback";
+}
+
+interface WeComImportSkippedItem {
+  title: string;
+  name: string;
+  reason: string;
+}
+
+interface WeComImportResult {
+  sourceLabel: string;
+  mode: "dry-run" | "apply";
+  communicationCandidateCount: number;
+  aiContextCandidateCount: number;
+  importableCount: number;
+  createCount: number;
+  duplicateCount: number;
+  skippedCount: number;
+  createdCount: number;
+  backupPath?: string;
+  plans: WeComImportPlanItem[];
+  skipped: WeComImportSkippedItem[];
+}
+
+interface WeComCandidatePath {
+  path: string;
+  modifiedAt: string;
+}
+
 type LLMProfileForm = Partial<LLMProfile> & {
   name: string;
   apiBaseUrl: string;
@@ -48,6 +85,15 @@ export default function SettingsPage() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [models, setModels] = useState<string[]>([]);
+  const [wecomJsonPath, setWecomJsonPath] = useState("");
+  const [wecomJsonText, setWecomJsonText] = useState("");
+  const [wecomFileName, setWecomFileName] = useState("");
+  const [wecomCandidates, setWecomCandidates] = useState<WeComCandidatePath[]>([]);
+  const [wecomIncludeMedium, setWecomIncludeMedium] = useState(false);
+  const [wecomLoading, setWecomLoading] = useState(false);
+  const [wecomResult, setWecomResult] = useState<WeComImportResult | null>(null);
+  const [wecomStatus, setWecomStatus] = useState("");
+  const [wecomError, setWecomError] = useState("");
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -96,6 +142,25 @@ export default function SettingsPage() {
     }
 
     loadSettings();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWeComCandidates() {
+      try {
+        const res = await fetch("/api/wecom/import");
+        const data = await res.json();
+        if (cancelled) return;
+        setWecomCandidates(data.candidates || []);
+        if (data.suggestedPath) setWecomJsonPath(data.suggestedPath);
+      } catch {
+        if (!cancelled) setWecomError("读取企微 JSON 建议路径失败");
+      }
+    }
+
+    void loadWeComCandidates();
     return () => { cancelled = true; };
   }, []);
 
@@ -243,11 +308,60 @@ export default function SettingsPage() {
     }
   }
 
+  async function chooseWeComFile(file: File | undefined) {
+    setWecomResult(null);
+    setWecomStatus("");
+    setWecomError("");
+    if (!file) {
+      setWecomJsonText("");
+      setWecomFileName("");
+      return;
+    }
+    if (!file.name.endsWith(".json")) {
+      setWecomError("请上传 JSON 文件");
+      return;
+    }
+    setWecomFileName(file.name);
+    setWecomJsonText(await file.text());
+  }
+
+  async function runWeComImport(apply: boolean) {
+    if (apply && wecomResult && wecomResult.createCount <= 0) {
+      setWecomError("当前预览没有可新增记录");
+      return;
+    }
+    if (apply && !confirm(`确认写入 ${wecomResult?.createCount ?? 0} 条家校沟通记录？写入前会自动备份数据库。`)) return;
+
+    setWecomLoading(true);
+    setWecomStatus("");
+    setWecomError("");
+    try {
+      const res = await fetch("/api/wecom/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonPath: wecomJsonText ? "" : wecomJsonPath,
+          jsonText: wecomJsonText,
+          includeMedium: wecomIncludeMedium,
+          apply,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "导入失败");
+      setWecomResult(data);
+      setWecomStatus(apply ? `已写入 ${data.createdCount} 条家校沟通记录。` : "预览完成，尚未写入。");
+    } catch (e: any) {
+      setWecomError(e.message);
+    } finally {
+      setWecomLoading(false);
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-800">系统设置</h2>
-        <p className="text-sm text-gray-500 mt-1">保存多个 OpenAI 兼容 LLM 配置，并选择当前启用的一组。</p>
+        <p className="text-sm text-gray-500 mt-1">管理本地 LLM 配置和数据导入入口。</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-5">
@@ -414,6 +528,158 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="mt-6 bg-white border border-gray-200 rounded-lg p-6 space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-800">企微家校沟通导入</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              从 chemtrack-wecom-bridge JSON 预览并导入家校沟通；未知课次会绑定学生所在班级第一次课。
+            </p>
+          </div>
+          {wecomFileName && (
+            <span className="text-xs border border-blue-100 bg-blue-50 text-blue-700 rounded px-2 py-1">
+              已选择 {wecomFileName}
+            </span>
+          )}
+        </div>
+
+        {wecomCandidates.length > 0 && (
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">最近生成的 JSON</span>
+            <select
+              value={wecomJsonPath}
+              onChange={(e) => {
+                setWecomJsonPath(e.target.value);
+                setWecomJsonText("");
+                setWecomFileName("");
+                setWecomResult(null);
+              }}
+              className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {wecomCandidates.map((item) => (
+                <option key={item.path} value={item.path}>
+                  {item.path} · {new Date(item.modifiedAt).toLocaleString()}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <label className="block">
+          <span className="text-sm font-medium text-gray-700">JSON 文件路径</span>
+          <input
+            value={wecomJsonPath}
+            onChange={(e) => {
+              setWecomJsonPath(e.target.value);
+              setWecomJsonText("");
+              setWecomFileName("");
+              setWecomResult(null);
+            }}
+            className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="$HOME/.openclaw/workspace/.../chemtrack-bridge.json"
+          />
+        </label>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={wecomIncludeMedium}
+              onChange={(e) => {
+                setWecomIncludeMedium(e.target.checked);
+                setWecomResult(null);
+              }}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            包含中等置信度学生匹配
+          </label>
+
+          <label className="inline-flex items-center gap-2 text-sm text-gray-600">
+            <span className="px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer">
+              上传 JSON
+            </span>
+            <input
+              type="file"
+              accept="application/json,.json"
+              onChange={(e) => void chooseWeComFile(e.target.files?.[0])}
+              className="hidden"
+            />
+          </label>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => runWeComImport(false)}
+            disabled={wecomLoading || (!wecomJsonPath && !wecomJsonText)}
+            className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
+          >
+            {wecomLoading ? "处理中..." : "预览导入"}
+          </button>
+          <button
+            onClick={() => runWeComImport(true)}
+            disabled={wecomLoading || !wecomResult || wecomResult.createCount <= 0}
+            className="px-4 py-2 rounded-md border border-green-200 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+          >
+            确认写入
+          </button>
+        </div>
+
+        {wecomStatus && <div className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">{wecomStatus}</div>}
+        {wecomError && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{wecomError}</div>}
+
+        {wecomResult && (
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-px bg-gray-200 text-center text-sm">
+              <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">沟通候选</div><div className="font-semibold text-gray-800">{wecomResult.communicationCandidateCount}</div></div>
+              <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">可入库</div><div className="font-semibold text-gray-800">{wecomResult.importableCount}</div></div>
+              <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">将新增</div><div className="font-semibold text-green-700">{wecomResult.createCount}</div></div>
+              <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">重复</div><div className="font-semibold text-gray-800">{wecomResult.duplicateCount}</div></div>
+              <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">跳过</div><div className="font-semibold text-amber-700">{wecomResult.skippedCount}</div></div>
+              <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">AI 上下文</div><div className="font-semibold text-gray-800">{wecomResult.aiContextCandidateCount}</div></div>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {wecomResult.backupPath && (
+                <div className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700">备份：{wecomResult.backupPath}</div>
+              )}
+
+              {wecomResult.plans.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">可导入记录</h4>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {wecomResult.plans.map((plan) => (
+                      <div key={`${plan.student.id}-${plan.session.id}-${plan.summary}`} className="rounded-md border border-gray-200 p-3">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 mb-1">
+                          <span className="font-medium text-gray-800">{plan.student.name}</span>
+                          <span>{plan.student.studentId}</span>
+                          <span>{plan.session.code}</span>
+                          <span>{plan.binding === "first_class_session_fallback" ? "第一次课锚点" : "指定课次"}</span>
+                          {plan.duplicate && <span className="text-amber-700 bg-amber-50 border border-amber-100 rounded px-1.5">重复</span>}
+                        </div>
+                        <p className="text-sm text-gray-700 leading-6">{plan.summary}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {wecomResult.skipped.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">跳过项</h4>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {wecomResult.skipped.map((item, index) => (
+                      <div key={`${item.title}-${index}`} className="text-sm text-gray-500">
+                        {item.name || "未知学生"} / {item.title || "未知会话"}：{item.reason}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

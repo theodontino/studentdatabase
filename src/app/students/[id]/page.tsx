@@ -7,17 +7,54 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
 
+interface StudentEvent {
+  id: string;
+  session: { date: string; code: string; semesterNumber: number };
+  type: string;
+  description: string;
+  rawText: string;
+}
+
+interface StudentCommunication {
+  id: string;
+  session: { date: string; code: string };
+  target: string;
+  summary: string;
+}
+
+interface StudentAttendance {
+  id: string;
+  present: boolean;
+  session: { date: string; semesterNumber: number; code: string };
+}
+
 interface StudentDetail {
   id: string; name: string; class: string; studentId: string;
   gender: string; labels: { id: string; name: string }[];
   sessionMetrics: { id: string; date: string; scoreA: number; scoreB: number; scoreC: number; scoreD: number }[];
-  events: { id: string; session: { date: string; code: string; semesterNumber: number }; type: string; description: string; rawText: string }[];
-  communications: { id: string; session: { date: string; code: string }; target: string; summary: string }[];
-  attendances?: { id: string; present: boolean; session: { date: string; semesterNumber: number; code: string } }[];
+  events: StudentEvent[];
+  communications: StudentCommunication[];
+  attendances?: StudentAttendance[];
   _pagination?: { eventHasMore: boolean; commHasMore: boolean };
 }
 
 const PAGE_SIZE = 20;
+const SUMMARY_LIMIT = 3;
+
+type DetailPanel = "events" | "communications" | "attendance";
+
+function eventTypeClass(type: string) {
+  if (type === "测验成绩") return "bg-green-100 text-green-700";
+  if (type === "心理状态") return "bg-purple-100 text-purple-700";
+  if (type === "家校沟通") return "bg-orange-100 text-orange-700";
+  return "bg-blue-100 text-blue-700";
+}
+
+function detailPanelTitle(panel: DetailPanel) {
+  if (panel === "events") return "关键事件";
+  if (panel === "communications") return "家校沟通";
+  return "考勤记录";
+}
 
 export default function StudentDetailPage() {
   const params = useParams();
@@ -31,6 +68,7 @@ export default function StudentDetailPage() {
   const [eventHasMore, setEventHasMore] = useState(false);
   const [commHasMore, setCommHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState<"events" | "comms" | null>(null);
+  const [activePanel, setActivePanel] = useState<DetailPanel | null>(null);
 
   const fetchStudent = useCallback(async () => {
     try {
@@ -54,27 +92,35 @@ export default function StudentDetailPage() {
   async function loadMoreEvents() {
     const nextOffset = eventOffset + PAGE_SIZE;
     setLoadingMore("events");
-    const res = await fetch(`/api/students/${id}?eventLimit=${PAGE_SIZE}&eventOffset=${nextOffset}&commLimit=0&commOffset=0`);
-    const data = await res.json();
-    if (student) {
-      setStudent({ ...student, events: [...student.events, ...data.events] });
+    try {
+      const res = await fetch(`/api/students/${id}?eventLimit=${PAGE_SIZE}&eventOffset=${nextOffset}&commLimit=0&commOffset=0`);
+      if (!res.ok) throw new Error("加载事件失败");
+      const data = await res.json();
+      setStudent((current) => current ? { ...current, events: [...current.events, ...data.events] } : current);
       setEventHasMore(data._pagination?.eventHasMore ?? false);
       setEventOffset(nextOffset);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMore(null);
     }
-    setLoadingMore(null);
   }
 
   async function loadMoreCommunications() {
     const nextOffset = commOffset + PAGE_SIZE;
     setLoadingMore("comms");
-    const res = await fetch(`/api/students/${id}?eventLimit=0&eventOffset=0&commLimit=${PAGE_SIZE}&commOffset=${nextOffset}`);
-    const data = await res.json();
-    if (student) {
-      setStudent({ ...student, communications: [...student.communications, ...data.communications] });
+    try {
+      const res = await fetch(`/api/students/${id}?eventLimit=0&eventOffset=0&commLimit=${PAGE_SIZE}&commOffset=${nextOffset}`);
+      if (!res.ok) throw new Error("加载沟通记录失败");
+      const data = await res.json();
+      setStudent((current) => current ? { ...current, communications: [...current.communications, ...data.communications] } : current);
       setCommHasMore(data._pagination?.commHasMore ?? false);
       setCommOffset(nextOffset);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMore(null);
     }
-    setLoadingMore(null);
   }
 
   if (loading) return (
@@ -115,6 +161,10 @@ export default function StudentDetailPage() {
   // Attendance summary
   const totalSessions = student.attendances?.length ?? 0;
   const presentCount = student.attendances?.filter(a => a.present).length ?? 0;
+  const absentCount = totalSessions - presentCount;
+  const eventSummary = student.events.slice(0, SUMMARY_LIMIT);
+  const communicationSummary = student.communications.slice(0, SUMMARY_LIMIT);
+  const attendanceSummary = (student.attendances ?? []).slice(0, SUMMARY_LIMIT);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -192,21 +242,24 @@ export default function StudentDetailPage() {
         </div>
       </div>
 
-      {/* Events, Communications, Attendance */}
+      {/* Student records */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">关键事件</h3>
-          {student.events.length > 0 ? (
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">关键事件</h3>
+              <p className="text-xs text-gray-400 mt-1">最近 {eventSummary.length} 条 · 已载入 {student.events.length} 条</p>
+            </div>
+            <button data-testid="student-records-view-events" onClick={() => setActivePanel("events")} className="text-xs text-blue-600 hover:text-blue-800 shrink-0">
+              查看全部
+            </button>
+          </div>
+          {eventSummary.length > 0 ? (
             <div className="space-y-3">
-              {student.events.map((event) => (
+              {eventSummary.map((event) => (
                 <div key={event.id} className="flex gap-3 text-sm">
                   <span className="text-xs text-gray-400 shrink-0 w-20">{event.session.date}</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
-                    event.type === "测验成绩" ? "bg-green-100 text-green-700" :
-                    event.type === "心理状态" ? "bg-purple-100 text-purple-700" :
-                    event.type === "家校沟通" ? "bg-orange-100 text-orange-700" :
-                    "bg-blue-100 text-blue-700"
-                  }`}>{event.type}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${eventTypeClass(event.type)}`}>{event.type}</span>
                   <div className="flex-1">
                     <p className="text-gray-700">{event.description}</p>
                     <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{event.rawText}</p>
@@ -215,19 +268,21 @@ export default function StudentDetailPage() {
               ))}
             </div>
           ) : <p className="text-sm text-gray-400 text-center py-8">暂无事件</p>}
-          {eventHasMore && (
-            <button onClick={loadMoreEvents} disabled={loadingMore === "events"}
-              className="mt-3 w-full text-center text-sm text-blue-600 hover:text-blue-800 py-1.5 rounded hover:bg-blue-50 disabled:opacity-50">
-              {loadingMore === "events" ? "加载中..." : `加载更多事件`}
-            </button>
-          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">家校沟通</h3>
-          {student.communications.length > 0 ? (
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">家校沟通</h3>
+              <p className="text-xs text-gray-400 mt-1">最近 {communicationSummary.length} 条 · 已载入 {student.communications.length} 条</p>
+            </div>
+            <button data-testid="student-records-view-communications" onClick={() => setActivePanel("communications")} className="text-xs text-blue-600 hover:text-blue-800 shrink-0">
+              查看全部
+            </button>
+          </div>
+          {communicationSummary.length > 0 ? (
             <div className="space-y-3">
-              {student.communications.map((comm) => (
+              {communicationSummary.map((comm) => (
                 <div key={comm.id} className="flex gap-3 text-sm">
                   <span className="text-xs text-gray-400 shrink-0 w-20">{comm.session.date}</span>
                   <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded shrink-0">{comm.target}</span>
@@ -236,20 +291,22 @@ export default function StudentDetailPage() {
               ))}
             </div>
           ) : <p className="text-sm text-gray-400 text-center py-8">暂无记录</p>}
-          {commHasMore && (
-            <button onClick={loadMoreCommunications} disabled={loadingMore === "comms"}
-              className="mt-3 w-full text-center text-sm text-blue-600 hover:text-blue-800 py-1.5 rounded hover:bg-blue-50 disabled:opacity-50">
-              {loadingMore === "comms" ? "加载中..." : `加载更多沟通记录`}
-            </button>
-          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">考勤记录</h3>
-          {student.attendances && student.attendances.length > 0 ? (
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">考勤记录</h3>
+              <p className="text-xs text-gray-400 mt-1">出勤 {presentCount}/{totalSessions} · 缺勤 {absentCount}</p>
+            </div>
+            <button data-testid="student-records-view-attendance" onClick={() => setActivePanel("attendance")} className="text-xs text-blue-600 hover:text-blue-800 shrink-0">
+              查看全部
+            </button>
+          </div>
+          {attendanceSummary.length > 0 ? (
             <div className="space-y-2">
-              {student.attendances.map((a, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm">
+              {attendanceSummary.map((a) => (
+                <div key={a.id} className="flex items-center gap-2 text-sm">
                   <span className={`text-xs font-mono font-medium px-1.5 py-0.5 rounded ${
                     a.present ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                   }`}>
@@ -263,6 +320,131 @@ export default function StudentDetailPage() {
           ) : <p className="text-sm text-gray-400 text-center py-8">暂无记录</p>}
         </div>
       </div>
+
+      {activePanel && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4 py-6" onClick={() => setActivePanel(null)}>
+          <div data-testid="student-records-panel" className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-3xl max-h-[86vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs text-gray-400">{student.name} 的学生记录</p>
+                <h3 className="text-lg font-semibold text-gray-800">{detailPanelTitle(activePanel)}</h3>
+              </div>
+              <button onClick={() => setActivePanel(null)} className="w-8 h-8 rounded-full border border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50">
+                ×
+              </button>
+            </div>
+
+            <div className="px-5 py-3 border-b border-gray-200 flex gap-2 overflow-x-auto">
+              {(["events", "communications", "attendance"] as DetailPanel[]).map((panel) => (
+                <button
+                  key={panel}
+                  data-testid={`student-records-tab-${panel}`}
+                  onClick={() => setActivePanel(panel)}
+                  className={`text-sm px-3 py-1.5 rounded border shrink-0 ${
+                    activePanel === panel
+                      ? "border-blue-600 bg-blue-50 text-blue-700"
+                      : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                  }`}
+                >
+                  {detailPanelTitle(panel)}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-5 overflow-y-auto">
+              {activePanel === "events" && (
+                <div className="space-y-3">
+                  {student.events.length > 0 ? student.events.map((event) => (
+                    <div key={event.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className="text-xs text-gray-400">{event.session.date}</span>
+                        <span className="text-xs text-gray-400">第{event.session.semesterNumber}课</span>
+                        <span className="text-xs text-gray-400">{event.session.code}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded ${eventTypeClass(event.type)}`}>{event.type}</span>
+                      </div>
+                      <p className="text-sm text-gray-800 leading-6">{event.description}</p>
+                      {event.rawText && (
+                        <div className="mt-3 bg-gray-50 border border-gray-100 rounded-lg p-3">
+                          <p className="text-xs text-gray-400 mb-1">原始片段</p>
+                          <p className="text-sm text-gray-600 leading-6">{event.rawText}</p>
+                        </div>
+                      )}
+                    </div>
+                  )) : (
+                    <p className="text-sm text-gray-400 text-center py-12">暂无事件</p>
+                  )}
+                  {eventHasMore && (
+                    <button onClick={loadMoreEvents} disabled={loadingMore === "events"}
+                      className="w-full text-sm text-blue-600 hover:text-blue-800 py-2 rounded-lg hover:bg-blue-50 disabled:opacity-50">
+                      {loadingMore === "events" ? "加载中..." : "加载更多事件"}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {activePanel === "communications" && (
+                <div className="space-y-3">
+                  {student.communications.length > 0 ? student.communications.map((comm) => (
+                    <div key={comm.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className="text-xs text-gray-400">{comm.session.date}</span>
+                        <span className="text-xs text-gray-400">{comm.session.code}</span>
+                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">{comm.target}</span>
+                      </div>
+                      <p className="text-sm text-gray-800 leading-6">{comm.summary}</p>
+                    </div>
+                  )) : (
+                    <p className="text-sm text-gray-400 text-center py-12">暂无家校沟通记录</p>
+                  )}
+                  {commHasMore && (
+                    <button onClick={loadMoreCommunications} disabled={loadingMore === "comms"}
+                      className="w-full text-sm text-blue-600 hover:text-blue-800 py-2 rounded-lg hover:bg-blue-50 disabled:opacity-50">
+                      {loadingMore === "comms" ? "加载中..." : "加载更多沟通记录"}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {activePanel === "attendance" && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs text-gray-400">总记录</p>
+                      <p className="text-lg font-semibold text-gray-800">{totalSessions}</p>
+                    </div>
+                    <div className="border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs text-gray-400">出勤</p>
+                      <p className="text-lg font-semibold text-green-700">{presentCount}</p>
+                    </div>
+                    <div className="border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs text-gray-400">缺勤</p>
+                      <p className="text-lg font-semibold text-red-700">{absentCount}</p>
+                    </div>
+                  </div>
+                  {(student.attendances ?? []).length > 0 ? (
+                    <div className="space-y-2">
+                      {(student.attendances ?? []).map((attendance) => (
+                        <div key={attendance.id} className="border border-gray-200 rounded-lg p-3 flex flex-wrap items-center gap-3">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                            attendance.present ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                          }`}>
+                            {attendance.present ? "出勤" : "缺勤"}
+                          </span>
+                          <span className="text-sm text-gray-700">第{attendance.session.semesterNumber}课</span>
+                          <span className="text-sm text-gray-500">{attendance.session.date}</span>
+                          <span className="text-xs text-gray-400">{attendance.session.code}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 text-center py-12">暂无考勤记录</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
