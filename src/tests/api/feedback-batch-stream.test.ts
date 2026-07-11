@@ -118,6 +118,7 @@ describe("feedback batch NDJSON stream", () => {
       data: expect.objectContaining({ module: "feedback", key: "VITEST-STREAM" }),
     }));
     expect(mocks.completionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      max_tokens: 2048,
       messages: [expect.objectContaining({
         content: expect.stringContaining("近期家校沟通"),
       })],
@@ -187,5 +188,26 @@ describe("feedback batch NDJSON stream", () => {
         expect.objectContaining({ id: "student-2", feedback: "乙手动编辑反馈" }),
       ],
     });
+  });
+
+  it("retries empty LLM feedback before streaming a failure placeholder", async () => {
+    mocks.completionCreate.mockReset()
+      .mockResolvedValueOnce({ choices: [{ message: { content: "" } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: "甲重试反馈" } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: "" } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: "" } }] });
+
+    const response = await POST(new NextRequest("http://localhost:3000/api/report/feedback-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionCode: "VITEST-STREAM-RETRY", historyModule: "feedback", bypassCache: true }),
+    }));
+    const events = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+
+    expect(events[1]).toMatchObject({ studentId: "student-1", feedback: "甲重试反馈" });
+    expect(events[2]).toMatchObject({ studentId: "student-2", feedback: "[生成失败，请重试]" });
+    expect(mocks.completionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      max_tokens: 2048,
+    }));
   });
 });

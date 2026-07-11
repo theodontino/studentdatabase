@@ -5,8 +5,8 @@ import { planWeComCommunicationImport } from "@/services/wecom-import-service";
 describe("wecom import service", () => {
   it("plans unknown-session communication with first class session fallback", async () => {
     const student = await prisma.student.findFirst({
-      where: { name: "张三" },
-      select: { id: true, studentId: true },
+      select: { id: true, name: true, studentId: true },
+      orderBy: { studentId: "asc" },
     });
     expect(student).toBeTruthy();
 
@@ -17,10 +17,10 @@ describe("wecom import service", () => {
         records: [
           {
             kind: "communication",
-            source: { conversationId: "ax-vitest", conversationTitle: "张三妈妈" },
+            source: { conversationId: "ax-vitest", conversationTitle: `${student!.name}妈妈` },
             matchedStudent: {
               id: student!.id,
-              name: "张三",
+              name: student!.name,
               studentId: student!.studentId,
               confidence: "high",
             },
@@ -39,7 +39,7 @@ describe("wecom import service", () => {
     expect(result.plans[0]).toMatchObject({
       binding: "first_class_session_fallback",
       target: "母亲",
-      student: { name: "张三", studentId: student!.studentId },
+      student: { name: student!.name, studentId: student!.studentId },
     });
     expect(result.plans[0].summary).toContain("企微长期沟通");
   });

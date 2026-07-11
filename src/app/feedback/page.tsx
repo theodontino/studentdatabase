@@ -41,12 +41,24 @@ function statusTone(active: boolean) {
   return active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500";
 }
 
+function todayLocalDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function FeedbackWorkbenchPage() {
   const [semesterId, setSemesterId] = useState("");
   const [className, setClassName] = useState("");
   const [sessionCode, setSessionCode] = useState("");
+  const [sessionRefreshKey, setSessionRefreshKey] = useState(0);
+  const [newSessionDate, setNewSessionDate] = useState(todayLocalDate);
+  const [creatingSession, setCreatingSession] = useState(false);
   const [rawText, setRawText] = useState("");
   const [parsing, setParsing] = useState(false);
+  const [assistantImporting, setAssistantImporting] = useState(false);
   const [parseStatus, setParseStatus] = useState("");
   const [streamContent, setStreamContent] = useState("");
   const [draftId, setDraftId] = useState("");
@@ -151,6 +163,32 @@ export default function FeedbackWorkbenchPage() {
     setStatus("");
   }
 
+  async function createSession() {
+    if (!semesterId || !className) {
+      setError("请先选择学期和班级");
+      return;
+    }
+    setCreatingSession(true);
+    setError("");
+    setStatus("");
+    try {
+      const response = await fetch(`/api/semesters/${semesterId}/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ className, date: newSessionDate }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "新建课次失败");
+      setSessionRefreshKey((current) => current + 1);
+      onSessionChange(data.code);
+      setStatus(`已新建 ${data.code}，可继续录入本节课的课堂回顾。`);
+    } catch (error: any) {
+      setError(error.message || "新建课次失败");
+    } finally {
+      setCreatingSession(false);
+    }
+  }
+
   function setParsedAttendance(index: number, present: boolean) {
     setParsedResult((current: any) => current ? {
       ...current,
@@ -199,6 +237,51 @@ export default function FeedbackWorkbenchPage() {
       setError(e.message || "解析失败");
     } finally {
       setParsing(false);
+    }
+  }
+
+  async function handleAssistantRosterImport(files: FileList | null) {
+    const selectedFiles = Array.from(files || []);
+    if (selectedFiles.length === 0) return;
+    if (!sessionCode) {
+      setError("请先选择课次，再导入助教表");
+      return;
+    }
+
+    setAssistantImporting(true);
+    setError("");
+    setStatus("");
+    setStreamContent("");
+    setDraftId("");
+    setParsedResult(null);
+    setReviewResult(null);
+    setCorrections([]);
+    setConfirmed(false);
+
+    try {
+      const formData = new FormData();
+      formData.set("sessionCode", sessionCode);
+      selectedFiles.forEach((file) => formData.append("files", file));
+      const res = await fetch("/api/feedback/assistant-roster", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "助教表解析失败");
+
+      setRawText(data.rawText || "");
+      setDraftId(data.draftId);
+      setParsedResult(data.parsedResult);
+      setReviewResult(data.reviewResult);
+      setCorrections(data.corrections || []);
+      const warningText = data.warnings?.length ? `；注意：${data.warnings.join("；")}` : "";
+      const absentText = data.absentStudents?.length ? `；缺勤：${data.absentStudents.join("、")}` : "";
+      setParseStatus(`已从助教表生成课堂记录，匹配 ${data.matchedRows ?? 0} 条${absentText}${warningText}`);
+      setStatus("助教表已解析，请确认结构化记录后写入。");
+    } catch (e: any) {
+      setError(e.message || "助教表解析失败");
+    } finally {
+      setAssistantImporting(false);
     }
   }
 
@@ -406,7 +489,27 @@ export default function FeedbackWorkbenchPage() {
           onClassChange={onClsChange}
           sessionCode={sessionCode}
           onSessionChange={onSessionChange}
+          refreshKey={sessionRefreshKey}
         />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="text-xs text-gray-500" htmlFor="feedback-new-session-date">新课次日期</label>
+          <input
+            id="feedback-new-session-date"
+            type="date"
+            value={newSessionDate}
+            onChange={(event) => setNewSessionDate(event.target.value)}
+            disabled={creatingSession}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+          />
+          <button
+            type="button"
+            onClick={() => void createSession()}
+            disabled={!semesterId || !className || creatingSession}
+            className="rounded-md border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {creatingSession ? "新建中..." : "新建课次"}
+          </button>
+        </div>
       </section>
 
       {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
@@ -431,7 +534,7 @@ export default function FeedbackWorkbenchPage() {
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 className="font-semibold text-gray-800">课堂回顾</h3>
-                <p className="text-sm text-gray-500 mt-1">可直接粘贴文本，也可以从录音转写页送入。</p>
+                <p className="text-sm text-gray-500 mt-1">可直接粘贴文本，也可以从录音转写页或助教表导入。</p>
               </div>
               <a href="/diarize" className="text-sm text-blue-600 hover:text-blue-700">录音转写</a>
             </div>
@@ -448,6 +551,32 @@ export default function FeedbackWorkbenchPage() {
               placeholder="写下这节课对反馈有用的事实。未提及学生会按缺勤补齐。"
               className="min-h-[180px] w-full resize-y rounded-lg border border-gray-300 p-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <div className="mt-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-gray-700">助教 Excel</div>
+                  <div className="mt-1 text-xs text-gray-500">把课堂纪律、作业、测验和备注转换为结构化课堂记录。</div>
+                </div>
+                <label className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium ${
+                  sessionCode && !assistantImporting
+                    ? "border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+                    : "border-gray-200 bg-gray-100 text-gray-400"
+                }`}>
+                  {assistantImporting ? "导入中..." : "选择文件"}
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    multiple
+                    disabled={!sessionCode || assistantImporting}
+                    onChange={(event) => {
+                      void handleAssistantRosterImport(event.target.files);
+                      event.currentTarget.value = "";
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
             <div className="mt-4 flex items-center justify-between gap-3">
               <span className="text-xs text-gray-400">{rawText.length} 字</span>
               <button
@@ -569,7 +698,7 @@ export default function FeedbackWorkbenchPage() {
                 disabled={exporting || feedbackCards.length === 0}
                 className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
               >
-                {exporting ? "导出中..." : "导出 Excel"}
+                {exporting ? "导出中..." : "导出课后反馈表"}
               </button>
             </div>
           </div>

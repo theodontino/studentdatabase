@@ -63,7 +63,7 @@ describe("/api/report/feedback", () => {
     await expect(response.json()).resolves.toEqual({ feedback: "单人重写反馈" });
     expect(mocks.buildFeedbackContext).toHaveBeenCalledWith(expect.anything(), "VITEST-SINGLE");
     expect(mocks.completionCreate).toHaveBeenCalledWith(expect.objectContaining({
-      max_tokens: 256,
+      max_tokens: 2048,
       messages: [expect.objectContaining({
         content: expect.stringContaining("学生标签：#稳定"),
       })],
@@ -73,5 +73,20 @@ describe("/api/report/feedback", () => {
         content: expect.stringContaining("近期家校沟通"),
       })],
     }));
+  });
+
+  it("retries once when the LLM returns empty content", async () => {
+    mocks.completionCreate.mockReset()
+      .mockResolvedValueOnce({ choices: [{ message: { content: "" } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: "重试后反馈" } }] });
+
+    const response = await POST(new NextRequest("http://localhost:3000/api/report/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studentId: "student-1", sessionCode: "VITEST-SINGLE" }),
+    }));
+
+    await expect(response.json()).resolves.toEqual({ feedback: "重试后反馈" });
+    expect(mocks.completionCreate).toHaveBeenCalledTimes(2);
   });
 });

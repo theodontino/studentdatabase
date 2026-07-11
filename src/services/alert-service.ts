@@ -17,7 +17,7 @@ interface ClassOverview {
   studentCount: number;
 }
 
-interface StudentAlert {
+export interface StudentAlert {
   studentId: string;
   studentName: string;
   class: string;

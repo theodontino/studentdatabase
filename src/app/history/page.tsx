@@ -5,7 +5,7 @@ import type { HistoryModule, WorkHistory } from "@/lib/history";
 
 const MODULES: Array<{ id: HistoryModule; label: string }> = [
   { id: "feedback", label: "课后反馈" },
-  { id: "quick-score", label: "快速评分" },
+  { id: "quick-score", label: "手动评分" },
   { id: "input", label: "NL 录入" },
   { id: "report", label: "报告" },
   { id: "export", label: "导出" },

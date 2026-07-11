@@ -20,12 +20,12 @@ export function useClasses() {
   return classes;
 }
 
-export function useSessions(semesterId: string, className: string) {
+export function useSessions(semesterId: string, className: string, refreshKey = 0) {
   const [sessions, setSessions] = useState<{ code: string; date: string; semesterNumber: number; class?: string | null; attendanceCount?: number; id?: string }[]>([]);
   useEffect(() => {
     if (!semesterId || !className) { setSessions([]); return; }
     fetch(`/api/sessions?semesterId=${semesterId}&className=${encodeURIComponent(className)}`)
       .then((r) => r.json()).then(setSessions);
-  }, [semesterId, className]);
+  }, [semesterId, className, refreshKey]);
   return sessions;
 }

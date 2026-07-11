@@ -242,7 +242,7 @@ export default function QuickScorePage() {
       try {
         await saveWorkHistory(
           "quick-score",
-          `${selectedClass} ${selectedSessionCode || date} 快速评分`,
+          `${selectedClass} ${selectedSessionCode || date} 手动评分`,
           { semesterId: selectedSemesterId, className: selectedClass, sessionCode: selectedSessionCode, date, cards },
           selectedSessionCode || date
         );
@@ -316,9 +316,9 @@ export default function QuickScorePage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">快速评分</h2>
+          <h2 className="text-2xl font-bold text-gray-800">手动评分</h2>
           <p className="text-sm text-gray-500 mt-1">
-            卡片式批量评分 + 考勤
+            手动录入三项评分与考勤，支持批量调整和长期历史恢复。
             {sem && <span className="text-gray-400 ml-2">| {sem.name} · 已上课 {sem.sessionCount} 次</span>}
           </p>
         </div>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClassSession, deleteClassSession } from "@/services/session-service";
 import { ServiceError } from "@/services/service-error";
 
-// POST /api/semesters/[id]/session - create today's class session
+// POST /api/semesters/[id]/session - create a class session
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -11,7 +11,10 @@ export async function POST(
     const { id: semesterId } = await params;
     const body = await request.json().catch(() => ({}));
     const classCode: string | undefined = body.classCode || body.className || undefined;
-    const session = await createClassSession({ semesterId, classCode });
+    const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
+      ? body.date
+      : undefined;
+    const session = await createClassSession({ semesterId, classCode, date });
     return NextResponse.json(session, { status: 201 });
   } catch (error) {
     console.error("POST session error:", error);

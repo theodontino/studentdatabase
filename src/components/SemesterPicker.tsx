@@ -12,17 +12,18 @@ interface Props {
   onSessionChange: (code: string) => void;
   showDefaultOption?: boolean;
   hideSession?: boolean;
+  refreshKey?: number;
 }
 
 export default function SemesterPicker({
   semesterId, onSemesterChange,
   className, onClassChange,
   sessionCode, onSessionChange,
-  showDefaultOption = true, hideSession = false,
+  showDefaultOption = true, hideSession = false, refreshKey = 0,
 }: Props) {
   const semesters = useSemesters();
   const classes = useClasses();
-  const sessions = useSessions(semesterId, className);
+  const sessions = useSessions(semesterId, className, refreshKey);
 
   function onSemChange(id: string) {
     onSemesterChange(id);

@@ -6,7 +6,8 @@ import {
   type FeedbackContextPreview,
   type FeedbackContextStudent,
 } from "@/services/feedback-context-service";
-import * as XLSX from "xlsx";
+import { buildFeedbackExportWorkbook } from "@/services/feedback-export-service";
+import { getAlertDashboard } from "@/services/alert-service";
 
 type HistoryModule = "feedback" | "report";
 interface FeedbackCard {
@@ -25,8 +26,10 @@ interface FeedbackState {
   total: number;
 }
 
-const cache = new Map<string, { buffer: Uint8Array; timestamp: number; state: FeedbackState }>();
+const cache = new Map<string, { timestamp: number; state: FeedbackState }>();
 const CACHE_TTL = 30 * 60 * 1000;
+const FEEDBACK_MAX_TOKENS = 2048;
+const FEEDBACK_MAX_ATTEMPTS = 2;
 
 function moduleFrom(value: unknown): HistoryModule | null {
   if (value === undefined || value === null || value === "report") return "report";
@@ -38,11 +41,23 @@ function cacheKey(module: HistoryModule, sessionCode: string) {
   return `${module}:${sessionCode}`;
 }
 
-function buildWorkbook(students: FeedbackCard[]) {
-  const rows = students.map((student) => ({ 姓名: student.name, 家校反馈: student.feedback }));
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), "家校反馈");
-  return new Uint8Array(XLSX.write(workbook, { type: "array", bookType: "xlsx" }));
+async function generateFeedbackText(
+  client: ReturnType<typeof createLLMClient>,
+  model: string,
+  prompt: string
+) {
+  for (let attempt = 1; attempt <= FEEDBACK_MAX_ATTEMPTS; attempt += 1) {
+    const response = await client.chat.completions.create({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.5,
+      max_tokens: FEEDBACK_MAX_TOKENS,
+    });
+    const content = response.choices[0]?.message?.content?.trim();
+    if (content) return content;
+  }
+
+  throw new Error("LLM 返回空反馈内容，请重试");
 }
 
 function parseHistoryState(value: string): FeedbackState | null {
@@ -91,21 +106,27 @@ export async function GET(request: NextRequest) {
   if (!historyModule) return NextResponse.json({ error: "无效的历史模块" }, { status: 400 });
 
   const key = cacheKey(historyModule, sessionCode);
-  let buffer: Uint8Array | null = null;
+  let state: FeedbackState | null = null;
   const cached = cache.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    buffer = cached.buffer;
+    state = cached.state;
   } else {
     if (cached) cache.delete(key);
     const history = await prisma.workHistory.findFirst({
       where: { module: historyModule, key: sessionCode },
       orderBy: { createdAt: "desc" },
     });
-    const state = history ? parseHistoryState(history.state) : null;
-    if (state) buffer = buildWorkbook(state.students);
+    state = history ? parseHistoryState(history.state) : null;
   }
 
-  if (!buffer) return NextResponse.json({ error: "尚未生成反馈" }, { status: 404 });
+  if (!state) return NextResponse.json({ error: "尚未生成反馈" }, { status: 404 });
+  const dashboard = await getAlertDashboard();
+  const buffer = await buildFeedbackExportWorkbook(
+    prisma,
+    sessionCode,
+    state.students,
+    dashboard.studentAlerts,
+  );
   return new Response(buffer as BodyInit, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -148,8 +169,7 @@ export async function POST(request: NextRequest) {
         students: cards,
         total: cards.length,
       };
-      const buffer = buildWorkbook(cards);
-      cache.set(key, { buffer, timestamp: Date.now(), state });
+      cache.set(key, { timestamp: Date.now(), state });
       await prisma.workHistory.create({
         data: {
           module: historyModule,
@@ -184,13 +204,7 @@ export async function POST(request: NextRequest) {
             const prompt = `${studentContext?.promptContext ?? card.name}\n\n请为${card.name}生成50-80字家校反馈，只反馈该生本人表现，不比较、不提其他学生姓名。温和客观，直接返回。`;
 
             try {
-              const response = await client.chat.completions.create({
-                model,
-                messages: [{ role: "user", content: prompt }],
-                temperature: 0.5,
-                max_tokens: 256,
-              });
-              card.feedback = response.choices[0]?.message?.content?.trim() || "[未生成内容]";
+              card.feedback = await generateFeedbackText(client, model, prompt);
             } catch (error) {
               console.error(`[feedback-batch] ${card.name} failed:`, error);
               card.feedback = "[生成失败，请重试]";
@@ -212,8 +226,7 @@ export async function POST(request: NextRequest) {
             students: cards,
             total,
           };
-          const buffer = buildWorkbook(cards);
-          cache.set(key, { buffer, timestamp: Date.now(), state });
+          cache.set(key, { timestamp: Date.now(), state });
           await prisma.workHistory.create({
             data: {
               module: historyModule,

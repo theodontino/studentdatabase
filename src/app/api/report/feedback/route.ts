@@ -3,16 +3,25 @@ import { prisma } from "@/lib/prisma";
 import { createLLMClient, getLLMModel } from "@/lib/llm";
 import { buildFeedbackContext } from "@/services/feedback-context-service";
 
-async function completeFeedback(prompt: string, maxTokens = 512) {
+const FEEDBACK_MAX_TOKENS = 2048;
+const FEEDBACK_MAX_ATTEMPTS = 2;
+
+async function completeFeedback(prompt: string, maxTokens = FEEDBACK_MAX_TOKENS) {
   const client = createLLMClient();
   const model = getLLMModel();
-  const resp = await client.chat.completions.create({
-    model,
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.5,
-    max_tokens: maxTokens,
-  });
-  return resp.choices[0]?.message?.content?.trim() || "";
+
+  for (let attempt = 1; attempt <= FEEDBACK_MAX_ATTEMPTS; attempt += 1) {
+    const resp = await client.chat.completions.create({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.5,
+      max_tokens: maxTokens,
+    });
+    const content = resp.choices[0]?.message?.content?.trim();
+    if (content) return content;
+  }
+
+  throw new Error("LLM 返回空反馈内容，请重试");
 }
 
 // POST /api/report/feedback - 按课次或时间段生成家校反馈
@@ -33,7 +42,7 @@ ${studentContext.promptContext}
 
 请只反馈该生本人表现，不比较、不提其他学生姓名。直接返回反馈文本，不要附带标题或说明。`;
 
-        return NextResponse.json({ feedback: await completeFeedback(prompt, 256) });
+        return NextResponse.json({ feedback: await completeFeedback(prompt) });
       } catch (error) {
         const message = error instanceof Error ? error.message : "读取反馈上下文失败";
         const status = message.includes("不存在") || message.includes("未关联") || message.includes("无学生") ? 400 : 500;

@@ -5,7 +5,8 @@ import { NextRequest } from "next/server";
 let studentId: string;
 
 beforeAll(async () => {
-  const s = await prisma.student.findFirst({ where: { name: "张三" }, select: { id: true } });
+  const s = await prisma.student.findFirst({ select: { id: true }, orderBy: { studentId: "asc" } });
+  expect(s).toBeTruthy();
   studentId = s!.id;
 });
 
