@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import type { HistoryModule, WorkHistory } from "@/lib/history";
 
 interface Props<T> {
-  module: HistoryModule;
+  module?: HistoryModule;
+  modules?: readonly HistoryModule[];
+  accept?: (state: unknown) => state is T;
   onRestore: (state: T) => void;
 }
 
-export default function WorkHistoryButton<T>({ module, onRestore }: Props<T>) {
+export default function WorkHistoryButton<T>({ module, modules, accept, onRestore }: Props<T>) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<WorkHistory<T>[]>([]);
   const [loading, setLoading] = useState(false);
@@ -19,16 +21,13 @@ export default function WorkHistoryButton<T>({ module, onRestore }: Props<T>) {
     let cancelled = false;
     setLoading(true);
     setError("");
-    fetch(`/api/history?module=${encodeURIComponent(module)}`)
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "加载历史失败");
-        if (!cancelled) setItems(data);
-      })
+    const targets = modules ?? (module ? [module] : []);
+    Promise.all(targets.map(async (target) => { const response = await fetch(`/api/history?module=${encodeURIComponent(target)}`); const data = await response.json(); if (!response.ok) throw new Error(data.error || "加载历史失败"); return data as WorkHistory<unknown>[]; }))
+      .then((groups) => { if (!cancelled) setItems(groups.flat().filter((item): item is WorkHistory<T> => accept ? accept(item.state) : true).sort((a, b) => b.createdAt.localeCompare(a.createdAt))); })
       .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "加载历史失败"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [module, open]);
+  }, [accept, module, modules, open]);
 
   async function remove(id: string) {
     if (!confirm("删除这条历史记录？")) return;
@@ -38,8 +37,9 @@ export default function WorkHistoryButton<T>({ module, onRestore }: Props<T>) {
 
   async function clearAll() {
     if (!items.length || !confirm("清空当前模块的全部历史？此操作不可撤销。")) return;
-    const response = await fetch(`/api/history?module=${encodeURIComponent(module)}`, { method: "DELETE" });
-    if (response.ok) setItems([]);
+    const targets = modules ?? (module ? [module] : []);
+    const responses = await Promise.all(targets.map((target) => fetch(`/api/history?module=${encodeURIComponent(target)}`, { method: "DELETE" })));
+    if (responses.every((response) => response.ok)) setItems([]);
   }
 
   return (
