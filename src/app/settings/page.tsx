@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import WeComWorkflowPanel from "@/components/wecom/WeComWorkflowPanel";
+import LocalToolStatusPanel from "@/components/system/LocalToolStatusPanel";
 
 interface LLMProfile {
   id: string;
@@ -423,6 +424,10 @@ export default function SettingsPage() {
           description="高级入口：同步、提取、预览并导入可用于课后反馈的家校沟通。"
           showFeedbackLink
         />
+      </div>
+
+      <div className="mt-6">
+        <LocalToolStatusPanel />
       </div>
     </div>
   );

@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { runWeComCatchCommand } from "@/services/wecomcatch-service";
+import { preflightWeComCatchSync } from "@/services/local-tool-status-service";
 
 export async function POST() {
+  const preflight = preflightWeComCatchSync();
+  if (!preflight.ready) {
+    return NextResponse.json({
+      error: `WeComCatch 环境不可用：${preflight.blockers.join("；")}`,
+      preflight,
+    }, { status: 503 });
+  }
+
   try {
     const result = await runWeComCatchCommand("sync-start");
     return NextResponse.json({

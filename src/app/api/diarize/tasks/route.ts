@@ -7,6 +7,7 @@ import {
   taskToView,
 } from "@/lib/diarize-tasks";
 import { runDiarizeTask } from "@/lib/diarize-runner";
+import { preflightDiarize } from "@/services/local-tool-status-service";
 
 export const runtime = "nodejs";
 
@@ -39,6 +40,14 @@ export async function POST(request: NextRequest) {
     }
     if (!isDiarizeEngine(engine)) {
       return NextResponse.json({ error: "无效的转写引擎" }, { status: 400 });
+    }
+
+    const preflight = preflightDiarize(engine);
+    if (!preflight.ready) {
+      return NextResponse.json({
+        error: `转写环境不可用：${preflight.blockers.join("；")}`,
+        preflight,
+      }, { status: 503 });
     }
 
     const task = await createDiarizeTask({
