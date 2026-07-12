@@ -8,6 +8,7 @@
 | `ARCHITECTURE.md` | 代码如何分层，稳定业务规则在哪里？ |
 | `OPERATIONS.md` | 如何启动、迁移、备份、恢复和验证？ |
 | `DECISIONS.md` | 为什么做出少数重要且长期有效的设计选择？ |
+| `PRIVACY.md` | 哪些数据不得进入 Git，开发与公开发布如何检查？ |
 | [`generated/SCHEMA.md`](generated/SCHEMA.md) | 当前 Schema 字段和 ER 关系是什么？ |
 | [`generated/ROUTES.md`](generated/ROUTES.md) | 当前 API 路由和 HTTP 方法是什么？ |
 

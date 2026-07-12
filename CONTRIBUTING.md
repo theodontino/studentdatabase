@@ -28,7 +28,7 @@
 2. 阅读 `AGENTS.md` 与相关稳定文档。
 3. 检查现有代码和测试。
 4. 实现最小充分改动。
-5. 运行测试、类型检查和 lint；涉及核心页面流程时同时运行 `npm run test:e2e`。
+5. 运行 `npm run privacy:check`、测试、类型检查和 lint；涉及核心页面流程时同时运行 `npm run test:e2e`。
 6. Commit 中引用 Issue，例如 `Refs #12`；完成时使用 `Closes #12`。
 7. 只有稳定认知变化时才更新 `docs/`。
 
@@ -43,3 +43,4 @@
 | 迁移、备份、恢复 | `docs/OPERATIONS.md` |
 | 重要设计选择及原因 | `docs/DECISIONS.md` |
 | Schema、路由和 ER 图 | `docs/generated/` |
+| 隐私分类、禁止提交内容和泄露处置 | `docs/PRIVACY.md` |

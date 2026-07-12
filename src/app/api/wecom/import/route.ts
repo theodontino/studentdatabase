@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { prisma } from "@/lib/prisma";
 import {
   applyWeComCommunicationImport,
@@ -42,7 +43,7 @@ async function collectJsonCandidates(root: string, maxDepth = 4): Promise<Candid
 }
 
 export async function GET() {
-  const home = process.env.HOME || "$HOME";
+  const home = process.env.HOME || homedir();
   const roots = [
     join(home, ".openclaw/workspace/work/active"),
     join(home, ".openclaw/workspace/output"),
@@ -76,8 +77,8 @@ export async function POST(request: NextRequest) {
       ? await applyWeComCommunicationImport(prisma, input)
       : await planWeComCommunicationImport(prisma, input);
     return NextResponse.json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[/api/wecom/import] error:", error);
-    return NextResponse.json({ error: error.message || "企微导入失败" }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "企微导入失败" }, { status: 400 });
   }
 }
