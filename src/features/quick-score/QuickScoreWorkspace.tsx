@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { SessionInfo, CardScore } from "@/lib/types";
 import WorkHistoryButton from "@/components/WorkHistoryButton";
+import { EmptyState } from "@/components/ui";
 import { saveWorkHistory } from "@/lib/history";
 import { SemesterDialog } from "@/features/courses";
 import BulkScoreToolbar from "./BulkScoreToolbar";
@@ -351,22 +352,22 @@ export default function QuickScoreWorkspace() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <main className="quick-score-workspace">
       <ContextHeader semesterName={sem?.name} sessionCount={sem?.sessionCount} history={<WorkHistoryButton<QuickScoreHistoryState> module="quick-score" onRestore={restoreHistory} />}>
       <div className="flex items-center gap-3 mb-2 flex-wrap">
         {/* Semester */}
-        <select value={selectedSemesterId} disabled={!contextHydrated || !workspaceHydrated} onChange={(e) => setSelectedSemesterId(e.target.value)}
+        <select aria-label="学期" value={selectedSemesterId} disabled={!contextHydrated || !workspaceHydrated} onChange={(e) => setSelectedSemesterId(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
         >
           {semesters.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
         </select>
-        <button onClick={() => setShowSemesterModal(true)}
+        <button aria-label="新建学期" onClick={() => setShowSemesterModal(true)}
           className="border border-gray-300 text-gray-500 px-2 py-2 rounded-lg text-sm hover:bg-gray-50"
           title="新建学期"
         >+</button>
 
         {/* Class */}
-        <select value={selectedClass} disabled={!contextHydrated || !workspaceHydrated} onChange={(e) => setSelectedClass(e.target.value)}
+        <select aria-label="班级" value={selectedClass} disabled={!contextHydrated || !workspaceHydrated} onChange={(e) => setSelectedClass(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
         >
           <option value="">选择班级</option>
@@ -378,6 +379,7 @@ export default function QuickScoreWorkspace() {
           <>
             <span className="text-xs text-gray-400">课次</span>
             <select
+              aria-label="课次"
               value={selectedSessionCode}
               onChange={(e) => handleSessionChange(e.target.value)}
               className="border border-blue-300 rounded-lg px-3 py-2 text-sm font-mono outline-none bg-blue-50"
@@ -396,19 +398,19 @@ export default function QuickScoreWorkspace() {
           <button onClick={handleDeleteSession} disabled={deletingSession}
             className="border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
             title="删除当前课次"
-          >{deletingSession ? "..." : "🗑"}</button>
+          >{deletingSession ? "删除中…" : "删除课次"}</button>
         )}
 
         <button onClick={handleRecordClass} disabled={recordingClass || !selectedSemesterId || !selectedClass}
           className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-        >{recordingClass ? "..." : "🔔 上课"}</button>
+        >{recordingClass ? "记录中…" : "开始上课"}</button>
       </div>
 
       {/* Control Bar — Row 2: date + session info */}
       {selectedSession && (
         <div className="flex items-center gap-3 mb-4 text-xs text-gray-500">
           <span>日期</span>
-          <input type="date" value={date}
+          <input aria-label="日期" type="date" value={date}
             onChange={(e) => { setDate(e.target.value); setSelectedSessionCode(""); }}
             className="border border-gray-300 rounded px-2 py-1 text-xs outline-none"
           />
@@ -419,7 +421,7 @@ export default function QuickScoreWorkspace() {
           </span>
           {/* v0.6: existing score warning */}
           {hasExistingScores && (
-            <span className="text-amber-600 text-xs font-medium">⚠ 已有评分记录，提交将覆盖</span>
+            <span className="text-amber-600 text-xs font-medium">已有评分记录，提交将覆盖</span>
           )}
         </div>
       )}
@@ -438,13 +440,13 @@ export default function QuickScoreWorkspace() {
 
       {/* Empty states */}
       {selectedClass && cards.length === 0 && (
-        <div className="text-center py-20 text-gray-400"><p className="text-4xl mb-3">📭</p><p>该班级暂无学生</p></div>
+        <EmptyState title="该班级暂无学生" description="请先在学生档案中添加学生，或切换到其他班级。" />
       )}
       {!selectedClass && (
-        <div className="text-center py-20 text-gray-400"><p className="text-4xl mb-3">👆</p><p>请选择学期和班级</p></div>
+        <EmptyState title="请选择学期和班级" description="选择后会自动载入最近课次与学生名单。" />
       )}
 
       <SemesterDialog open={showSemesterModal} onClose={() => setShowSemesterModal(false)} onSaved={(semester) => { setSemesters((current) => [semester as Semester, ...current]); setSelectedSemesterId(semester.id); }} />
-    </div>
+    </main>
   );
 }

@@ -1,3 +1,28 @@
+import { Badge, Toolbar } from "@/components/ui";
 import { DIM_CONFIG } from "@/lib/constants";
 import type { CardScore } from "@/lib/types";
-export default function BulkScoreToolbar({ cards, changedCount, absentCount, onSet }: { cards: CardScore[]; changedCount: number; absentCount: number; onSet: (dimension: "A" | "B" | "C", value: number) => void }) { return <div className="mb-4 flex flex-wrap items-center gap-6 rounded-lg border border-gray-200 bg-white p-3"><span className="shrink-0 text-xs font-medium text-gray-500">批量设置：</span>{DIM_CONFIG.map((dimension) => <div key={dimension.key} className="flex items-center gap-1.5"><span className="w-8 text-xs text-gray-400">{dimension.label}</span>{[0,1,2,3,4,5].map((score) => <button key={score} onClick={() => onSet(dimension.key, score)} className={`h-7 w-7 rounded border text-xs font-medium ${score <= 1 ? "border-red-200 text-red-600" : score === 2 ? "border-orange-200 text-orange-600" : score === 3 ? "border-gray-200 text-gray-500" : "border-green-200 text-green-600"}`}>{score}</button>)}</div>)}<span className="text-xs text-gray-400">已修改 {changedCount}/{cards.length} 人{absentCount > 0 && <span className="ml-1 text-red-500">· {absentCount}人缺勤</span>}</span></div>; }
+
+export default function BulkScoreToolbar({ cards, changedCount, absentCount, onSet }: { cards: CardScore[]; changedCount: number; absentCount: number; onSet: (dimension: "A" | "B" | "C", value: number) => void }) {
+  return (
+    <Toolbar className="quick-score-bulk">
+      <div className="quick-score-bulk__title">
+        <strong>批量设置</strong>
+        <span>整班统一调整后，仍可单独修改学生。</span>
+      </div>
+      <div className="quick-score-bulk__dimensions">
+        {DIM_CONFIG.map((dimension) => (
+          <div key={dimension.key} className="quick-score-bulk__dimension">
+            <span>{dimension.label}</span>
+            <div>{[0, 1, 2, 3, 4, 5].map((score) => (
+              <button key={score} type="button" onClick={() => onSet(dimension.key, score)} className={`quick-score-value quick-score-value--${score}`}>{score}</button>
+            ))}</div>
+          </div>
+        ))}
+      </div>
+      <div className="quick-score-bulk__status">
+        <Badge tone={changedCount > 0 ? "info" : "neutral"}>已修改 {changedCount}/{cards.length} 人</Badge>
+        {absentCount > 0 && <Badge tone="danger">{absentCount} 人缺勤</Badge>}
+      </div>
+    </Toolbar>
+  );
+}

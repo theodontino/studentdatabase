@@ -1,5 +1,18 @@
 import type { ReactNode } from "react";
+import { PageHeader } from "@/components/ui";
 
 export default function ContextHeader({ semesterName, sessionCount, history, children }: { semesterName?: string; sessionCount?: number; history: ReactNode; children: ReactNode }) {
-  return <><div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-2xl font-bold text-gray-800">手动评分</h2><p className="mt-1 text-sm text-gray-500">录入三项评分与考勤，保存时只提交变动。{semesterName && <span className="ml-2 text-gray-400">| {semesterName} · 已上课 {sessionCount} 次</span>}</p></div>{history}</div><div className="mb-4">{children}</div></>;
+  const contextDescription = semesterName ? `${semesterName} · 已记录 ${sessionCount ?? 0} 次课` : "选择学期、班级和课次后开始录入";
+
+  return (
+    <section className="quick-score-context">
+      <PageHeader
+        title="手动评分"
+        description="录入三项评分与考勤；页面只保存有变动的学生。"
+        actions={history}
+        context={<span className="quick-score-context__summary">{contextDescription}</span>}
+      />
+      <div className="quick-score-context__controls">{children}</div>
+    </section>
+  );
 }
