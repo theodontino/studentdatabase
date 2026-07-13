@@ -7,7 +7,7 @@ import { Button, IconButton } from "./controls";
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-function Overlay({ open, title, children, onClose, kind }: { open: boolean; title: string; children: ReactNode; onClose: () => void; kind: "dialog" | "drawer" }) {
+function Overlay({ open, title, children, onClose, kind, size = "default" }: { open: boolean; title: string; children: ReactNode; onClose: () => void; kind: "dialog" | "drawer"; size?: "default" | "wide" }) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -33,7 +33,7 @@ function Overlay({ open, title, children, onClose, kind }: { open: boolean; titl
     };
   }, [open, onClose]);
   if (!open) return null;
-  return <div className="ui-overlay" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className={cx("ui-overlay__panel", `ui-overlay__panel--${kind}`)}><div className="ui-overlay__header"><h2 id={titleId}>{title}</h2><IconButton label="关闭" onClick={onClose}>×</IconButton></div>{children}</div></div>;
+  return <div className="ui-overlay" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className={cx("ui-overlay__panel", `ui-overlay__panel--${kind}`, size === "wide" && "ui-overlay__panel--wide")}><div className="ui-overlay__header"><h2 id={titleId}>{title}</h2><IconButton label="关闭" onClick={onClose}>×</IconButton></div>{children}</div></div>;
 }
 
 export function Dialog(props: Omit<Parameters<typeof Overlay>[0], "kind">) { return <Overlay {...props} kind="dialog" />; }
