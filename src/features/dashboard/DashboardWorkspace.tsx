@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import ArchiveButton from "@/components/ArchiveButton";
-import DashboardOverview, { type DashboardData } from "@/components/DashboardOverview";
+import DashboardOverview from "./DashboardOverview";
+import type { DashboardData } from "./types";
 import { ErrorState, LoadingState, PageHeader, Select } from "@/components/ui";
 import { requestJson } from "@/lib/api-client";
 import { useTeachingContext, type SemesterSummary } from "@/features/teaching-context";
