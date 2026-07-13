@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import WorkHistoryButton from "@/components/WorkHistoryButton";
 import { saveWorkHistory } from "@/lib/history";
+import { useSessionWorkspace } from "@/lib/use-session-workspace";
 
 interface ExportHistoryState { startDate: string; endDate: string; }
+function isExportHistoryState(value: unknown): value is ExportHistoryState {
+  if (!value || typeof value !== "object") return false;
+  const state = value as Partial<ExportHistoryState>;
+  return typeof state.startDate === "string" && typeof state.endDate === "string";
+}
 
 export default function ExportWorkspace() {
   const today = new Date().toISOString().split("T")[0];
@@ -16,6 +22,8 @@ export default function ExportWorkspace() {
   const [endDate, setEndDate] = useState(today);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const workspaceValue = useMemo<ExportHistoryState>(() => ({ startDate, endDate }), [endDate, startDate]);
+  useSessionWorkspace({ key: "export", value: workspaceValue, validate: isExportHistoryState, restore: (saved) => { if (!saved) return; setStartDate(saved.startDate); setEndDate(saved.endDate); setError(""); } });
 
   async function handleExport() {
     setLoading(true);

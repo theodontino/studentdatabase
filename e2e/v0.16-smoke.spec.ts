@@ -18,8 +18,11 @@ async function blockExternalRequests(page: Page) {
 }
 
 async function selectQuickScoreClass(page: Page) {
-  await expect(page.locator("select")).toHaveCount(2);
-  await page.locator("select").nth(1).selectOption({ label: TEST_FIXTURE.class.name });
+  const classSelect = page.locator("select").nth(1);
+  await expect(classSelect).toBeEnabled();
+  if (await classSelect.inputValue() !== TEST_FIXTURE.class.name) {
+    await classSelect.selectOption({ label: TEST_FIXTURE.class.name });
+  }
   await expect(page.getByText(TEST_FIXTURE.students[0].name, { exact: true })).toBeVisible();
   await expect(page.locator("select")).toHaveCount(3);
 }

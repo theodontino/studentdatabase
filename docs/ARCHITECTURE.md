@@ -8,7 +8,9 @@ Chem-Track 是单人维护的本地优先课后反馈自动化工具。架构优
 
 App Router 页面只组合 Feature 工作台或执行兼容重定向。交互状态、请求和历史恢复归属 `src/features/`；通用控件归属 `src/components/ui/`，HTTP JSON 与文件下载归属 `src/lib/api-client.ts`。Feature 通过公开入口复用共享能力，不直接引用另一个 Feature 的内部文件。
 
-学期、班级、课次采用显式 URL 上下文：`semesterId`、`class`、`sessionCode`。学期变化清空班级和课次，班级变化清空课次。系统不建立客户端全局缓存或隐藏的全局教学状态。
+学期、班级、课次采用显式 URL 上下文：`semesterId`、`class`、`sessionCode`。学期变化清空班级和课次，班级变化清空课次。URL 是当前页面的事实来源；标签页级 `sessionStorage` 只记录最近教学上下文，用于在工作台之间导航时补全 URL，不作为全局数据缓存。
+
+未提交的页面工作状态使用带版本包装的标签页级 `sessionStorage` 保留，涉及教学数据的工作台按“页面 + 学期 + 班级 + 课次”隔离，避免把旧草稿恢复到另一课次。工作台只能通过 `src/lib/session-workspace.ts` 和对应 hook 读写，必须校验恢复数据，版本不匹配时放弃恢复。该存储用于切换页面和刷新后继续当前工作，不替代数据库 `WorkHistory`。凭据、API Key、未提交的 `File`/`Blob` 和录音流不得写入页面工作状态；浏览器无法安全恢复的本地文件必须在离页前提醒。已创建的转写任务只保留任务 ID，结果仍从服务端任务目录读取。
 
 展示型 TSX 由 Playwright 覆盖关键工作流和窄屏导航；Vitest 覆盖 API、服务、纯函数、reducer、URL 与历史适配器。这样页面从 `app/` 迁入 Feature 时不会改变覆盖率统计口径。
 

@@ -2,4 +2,13 @@ export type { TeachingContext, SemesterSummary, SessionSummary, StudentSummary }
 export { TeachingContextSelector } from "./TeachingContextSelector";
 export { useTeachingContext } from "./use-teaching-context";
 export { useClasses, useSemesters, useSessions } from "./use-options";
-export { applyTeachingContext, emptyTeachingContext, parseTeachingContext } from "./url-context";
+export {
+  applyTeachingContext,
+  emptyTeachingContext,
+  hasTeachingContext,
+  isTeachingContext,
+  parseTeachingContext,
+  readStoredTeachingContext,
+  teachingContextWorkspaceKey,
+  writeStoredTeachingContext,
+} from "./url-context";

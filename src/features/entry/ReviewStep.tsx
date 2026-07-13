@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { DIM_LABEL } from "@/lib/constants";
+import { useSessionWorkspace } from "@/lib/use-session-workspace";
 
 interface DraftStudent {
   name: string;
@@ -30,6 +31,22 @@ interface Draft {
   createdAt: string;
 }
 
+interface ReviewWorkspaceState {
+  edits: Record<string, DraftParsedResult>;
+  expandedId: string | null;
+  filterStatus: "pending" | "confirmed" | "rejected";
+  filterClass: string;
+}
+
+function isReviewWorkspaceState(value: unknown): value is ReviewWorkspaceState {
+  if (!value || typeof value !== "object") return false;
+  const state = value as Partial<ReviewWorkspaceState>;
+  return Boolean(state.edits) && typeof state.edits === "object"
+    && (state.expandedId === null || typeof state.expandedId === "string")
+    && ["pending", "confirmed", "rejected"].includes(state.filterStatus ?? "")
+    && typeof state.filterClass === "string";
+}
+
 export default function ReviewStep() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +58,19 @@ export default function ReviewStep() {
 
   // Editable state
   const [edits, setEdits] = useState<Record<string, DraftParsedResult>>({});
+  const workspaceValue = useMemo<ReviewWorkspaceState>(() => ({ edits, expandedId, filterStatus, filterClass }), [edits, expandedId, filterClass, filterStatus]);
+  useSessionWorkspace({
+    key: "entry-review",
+    value: workspaceValue,
+    validate: isReviewWorkspaceState,
+    restore: (saved) => {
+      if (!saved) return;
+      setEdits(saved.edits);
+      setExpandedId(saved.expandedId);
+      setFilterStatus(saved.filterStatus);
+      setFilterClass(saved.filterClass);
+    },
+  });
 
   useEffect(() => {
     // Load class list
@@ -147,6 +177,11 @@ export default function ReviewStep() {
 
       fetchDrafts(filterStatus, filterClass);
       setExpandedId(null);
+      setEdits((current) => {
+        const next = { ...current };
+        delete next[draftId];
+        return next;
+      });
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "操作失败");
     } finally {

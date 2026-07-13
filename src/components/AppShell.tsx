@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { IconButton } from "@/components/ui";
+import { applyTeachingContext, readStoredTeachingContext } from "@/features/teaching-context";
 
 const groups = [
   { label: "概览", items: [{ href: "/", label: "仪表盘", icon: "dashboard" as const }] },
@@ -27,7 +28,17 @@ const groups = [
 ];
 
 function Navigation({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
-  return <><div className="app-brand"><span className="app-brand__mark">CT</span><div><strong>Chem-Track AI</strong><small>化学学生追踪系统</small></div></div><nav className="app-nav" aria-label="主导航">{groups.map((group) => <div key={group.label} className="app-nav__group"><p>{group.label}</p>{group.items.map((item) => { const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href) || (item.href.startsWith("/system") && pathname.startsWith("/system")); return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={active ? "is-active" : ""} onClick={onNavigate}><AppIcon name={item.icon} />{item.label}</Link>; })}</div>)}</nav><div className="app-sidebar__footer"><span>本机单教师工作区</span><a href="https://github.com/theodontino/studentdatabase" target="_blank" rel="noreferrer">源代码 · AGPL-3.0</a></div></>;
+  const router = useRouter();
+  function navigateWithContext(event: React.MouseEvent<HTMLAnchorElement>, href: string) {
+    onNavigate?.();
+    if (!["/", "/feedback", "/quick-score", "/entry", "/daily-report"].includes(href)) return;
+    const context = readStoredTeachingContext(window.sessionStorage);
+    if (!context) return;
+    event.preventDefault();
+    const url = applyTeachingContext(new URL(href, window.location.origin), context);
+    router.push(`${url.pathname}${url.search}`);
+  }
+  return <><div className="app-brand"><span className="app-brand__mark">CT</span><div><strong>Chem-Track AI</strong><small>化学学生追踪系统</small></div></div><nav className="app-nav" aria-label="主导航">{groups.map((group) => <div key={group.label} className="app-nav__group"><p>{group.label}</p>{group.items.map((item) => { const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href) || (item.href.startsWith("/system") && pathname.startsWith("/system")); return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={active ? "is-active" : ""} onClick={(event) => navigateWithContext(event, item.href)}><AppIcon name={item.icon} />{item.label}</Link>; })}</div>)}</nav><div className="app-sidebar__footer"><span>工作区已在本标签页自动保留</span><span>本机单教师工作区</span><a href="https://github.com/theodontino/studentdatabase" target="_blank" rel="noreferrer">源代码 · AGPL-3.0</a></div></>;
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {

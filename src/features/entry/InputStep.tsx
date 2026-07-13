@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import SemesterPicker from "@/components/SemesterPicker";
 import { DIM_LABEL } from "@/lib/constants";
 import type { DraftParseResult } from "@/lib/types";
 import WorkHistoryButton from "@/components/WorkHistoryButton";
 import { saveWorkHistory } from "@/lib/history";
+import { useSessionWorkspace } from "@/lib/use-session-workspace";
+import { teachingContextWorkspaceKey, useTeachingContext, type TeachingContext } from "@/features/teaching-context";
 
 interface InputHistoryState {
   rawText: string;
@@ -16,6 +18,23 @@ interface InputHistoryState {
   result: DraftParseResult;
 }
 
+interface InputWorkspaceState {
+  context: TeachingContext;
+  rawText: string;
+  result: DraftParseResult | null;
+}
+
+function isInputWorkspaceState(value: unknown): value is InputWorkspaceState {
+  if (!value || typeof value !== "object") return false;
+  const state = value as Partial<InputWorkspaceState>;
+  return Boolean(state.context)
+    && typeof state.context?.semesterId === "string"
+    && typeof state.context?.className === "string"
+    && typeof state.context?.sessionCode === "string"
+    && typeof state.rawText === "string"
+    && (state.result === null || typeof state.result === "object");
+}
+
 export default function InputStep({ onReview }: { onReview?: () => void }) {
   const router = useRouter();
   const [rawText, setRawText] = useState("");
@@ -23,16 +42,36 @@ export default function InputStep({ onReview }: { onReview?: () => void }) {
   const [result, setResult] = useState<DraftParseResult | null>(null);
   const [error, setError] = useState("");
 
-  const [selectedSemesterId, setSelectedSemesterId] = useState("");
-  const [selectedClass, setSelectedClass] = useState("");
-  const [selectedSessionCode, setSelectedSessionCode] = useState("");
+  const { context, hydrated: contextHydrated, setContext, setSemesterId, setClassName, setSessionCode } = useTeachingContext();
+  const selectedSemesterId = context.semesterId;
+  const selectedClass = context.className;
+  const selectedSessionCode = context.sessionCode;
+  const workspaceValue = useMemo<InputWorkspaceState>(() => ({ context, rawText, result }), [context, rawText, result]);
+  const workspace = useSessionWorkspace({
+    key: teachingContextWorkspaceKey("entry-input", context),
+    value: workspaceValue,
+    validate: isInputWorkspaceState,
+    enabled: contextHydrated,
+    restore: (saved) => {
+      if (!saved) {
+        setRawText("");
+        setResult(null);
+        setError("");
+        return;
+      }
+      setRawText(saved.rawText);
+      setResult(saved.result);
+      setError("");
+    },
+  });
 
   useEffect(() => {
+    if (!workspace.hydrated) return;
     const draft = sessionStorage.getItem("chem-track:nl-input-draft");
     if (!draft) return;
     setRawText(draft);
     sessionStorage.removeItem("chem-track:nl-input-draft");
-  }, []);
+  }, [workspace.hydrated]);
 
   async function handleSubmit() {
     if (!rawText.trim()) return;
@@ -68,9 +107,7 @@ export default function InputStep({ onReview }: { onReview?: () => void }) {
 
   function restoreHistory(state: InputHistoryState) {
     setRawText(state.rawText);
-    setSelectedSemesterId(state.semesterId);
-    setSelectedClass(state.className);
-    setSelectedSessionCode(state.sessionCode);
+    setContext({ semesterId: state.semesterId, className: state.className, sessionCode: state.sessionCode });
     setResult(state.result);
     setError("");
   }
@@ -89,11 +126,11 @@ export default function InputStep({ onReview }: { onReview?: () => void }) {
       <div className="mb-4">
         <SemesterPicker
           semesterId={selectedSemesterId}
-          onSemesterChange={setSelectedSemesterId}
+          onSemesterChange={setSemesterId}
           className={selectedClass}
-          onClassChange={setSelectedClass}
+          onClassChange={setClassName}
           sessionCode={selectedSessionCode}
-          onSessionChange={setSelectedSessionCode}
+          onSessionChange={setSessionCode}
         />
         {selectedSessionCode && (
           <span className="text-xs text-blue-600 font-medium">✓ 将关联到此课次</span>

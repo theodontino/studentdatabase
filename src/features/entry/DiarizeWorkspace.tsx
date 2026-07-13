@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { readSSEStream } from "@/lib/sse";
+import { useSessionWorkspace } from "@/lib/use-session-workspace";
+import { useUnsavedNavigationWarning } from "@/lib/use-unsaved-navigation-warning";
 
 type DiarizeEngine = "auto" | "local" | "tingwu";
 type DiarizeTaskStatus = "queued" | "running" | "succeeded" | "failed";
@@ -24,6 +26,14 @@ interface DiarizeTask {
   hasResultJson: boolean;
   resultText?: string;
   log?: string;
+}
+
+interface DiarizeSessionState { engine: DiarizeEngine; activeTaskId: string; }
+function isDiarizeSessionState(value: unknown): value is DiarizeSessionState {
+  if (!value || typeof value !== "object") return false;
+  const state = value as Partial<DiarizeSessionState>;
+  return (state.engine === "auto" || state.engine === "local" || state.engine === "tingwu")
+    && typeof state.activeTaskId === "string";
 }
 
 const ENGINES: { value: DiarizeEngine; label: string; note: string }[] = [
@@ -90,6 +100,21 @@ export default function DiarizeWorkspace() {
   const recordingChunksRef = useRef<BlobPart[]>([]);
   const recordingTimerRef = useRef<number | null>(null);
   const recordingSecondsRef = useRef(0);
+  const workspaceValue = useMemo<DiarizeSessionState>(() => ({ engine, activeTaskId: activeTask?.id ?? "" }), [activeTask?.id, engine]);
+  useSessionWorkspace({
+    key: "diarize",
+    value: workspaceValue,
+    validate: isDiarizeSessionState,
+    restore: (saved) => {
+      if (!saved) return;
+      setEngine(saved.engine);
+      if (saved.activeTaskId) void loadTask(saved.activeTaskId);
+    },
+  });
+  useUnsavedNavigationWarning(
+    recordingState === "recording" || Boolean(audioFile && !activeTask),
+    "当前录音或尚未提交的音频文件不能由浏览器自动恢复。确定离开此页面吗？",
+  );
 
   useEffect(() => {
     loadTasks();
@@ -324,6 +349,7 @@ export default function DiarizeWorkspace() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-800">录音转写</h2>
         <p className="text-sm text-gray-500 mt-1">把课后回顾录音转成文字稿，再送入课后反馈工作台。</p>
+        <p className="text-xs text-gray-400 mt-1">转写方式和已创建任务会在切换页面后恢复；未提交的音频文件受浏览器安全限制，离开前会提醒。</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5">

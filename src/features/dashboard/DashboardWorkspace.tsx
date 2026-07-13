@@ -6,32 +6,30 @@ import ArchiveButton from "@/components/ArchiveButton";
 import DashboardOverview, { type DashboardData } from "@/components/DashboardOverview";
 import { ErrorState, LoadingState, PageHeader, Select } from "@/components/ui";
 import { requestJson } from "@/lib/api-client";
-import type { SemesterSummary } from "@/features/teaching-context";
+import { useTeachingContext, type SemesterSummary } from "@/features/teaching-context";
 
 export default function DashboardWorkspace() {
   const [semesters, setSemesters] = useState<SemesterSummary[]>([]);
-  const [selectedSemesterId, setSelectedSemesterId] = useState("");
+  const { context, hydrated, setSemesterId } = useTeachingContext();
+  const selectedSemesterId = context.semesterId;
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const fetchData = useCallback(async (semesterId: string) => {
     setLoading(true); setError("");
-    try { const query = semesterId ? `?semesterId=${encodeURIComponent(semesterId)}` : ""; const dashboard = await requestJson<DashboardData>(`/api/alerts${query}`); setData(dashboard); if (!semesterId && dashboard.semester) setSelectedSemesterId(dashboard.semester.id); }
+    try { const query = semesterId ? `?semesterId=${encodeURIComponent(semesterId)}` : ""; const dashboard = await requestJson<DashboardData>(`/api/alerts${query}`); setData(dashboard); if (!semesterId && dashboard.semester) setSemesterId(dashboard.semester.id); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "读取仪表盘失败"); }
     finally { setLoading(false); }
-  }, []);
+  }, [setSemesterId]);
 
   useEffect(() => {
-    const semesterId = new URLSearchParams(window.location.search).get("semesterId") ?? "";
     requestJson<SemesterSummary[]>("/api/semesters").then(setSemesters).catch(() => setSemesters([]));
-    setSelectedSemesterId(semesterId); void fetchData(semesterId);
-  }, [fetchData]);
+  }, []);
+  useEffect(() => { if (hydrated) void fetchData(selectedSemesterId); }, [fetchData, hydrated, selectedSemesterId]);
 
   function selectSemester(semesterId: string) {
-    setSelectedSemesterId(semesterId);
-    const url = new URL(window.location.href); if (semesterId) url.searchParams.set("semesterId", semesterId); else url.searchParams.delete("semesterId"); window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`);
-    void fetchData(semesterId);
+    setSemesterId(semesterId);
   }
 
   return <div className="mx-auto max-w-6xl">

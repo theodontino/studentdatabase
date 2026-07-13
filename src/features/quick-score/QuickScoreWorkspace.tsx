@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { SessionInfo, CardScore } from "@/lib/types";
 import WorkHistoryButton from "@/components/WorkHistoryButton";
 import { saveWorkHistory } from "@/lib/history";
@@ -10,6 +10,8 @@ import StudentScoreGrid from "./StudentScoreGrid";
 import SaveBar from "./SaveBar";
 import { useQuickScoreWorkspace } from "./useQuickScoreWorkspace";
 import ContextHeader from "./ContextHeader";
+import { useTeachingContext, isTeachingContext, teachingContextWorkspaceKey, type TeachingContext } from "@/features/teaching-context";
+import { useSessionWorkspace } from "@/lib/use-session-workspace";
 
 interface Student { id: string; name: string; class: string; gender: string; }
 interface Semester { id: string; name: string; startDate: string; endDate: string; sessionCount: number; }
@@ -21,13 +23,50 @@ interface QuickScoreHistoryState {
   cards: CardScore[];
 }
 
+interface QuickScoreSessionState {
+  context: TeachingContext;
+  date: string;
+  cards: CardScore[];
+}
+
+function isCardScore(value: unknown): value is CardScore {
+  if (!value || typeof value !== "object") return false;
+  const card = value as Partial<CardScore>;
+  return typeof card.studentId === "string"
+    && typeof card.studentName === "string"
+    && typeof card.scoreA === "number"
+    && typeof card.scoreB === "number"
+    && typeof card.scoreC === "number"
+    && typeof card.present === "boolean"
+    && typeof card.note === "string";
+}
+
+function isQuickScoreSessionState(value: unknown): value is QuickScoreSessionState {
+  if (!value || typeof value !== "object") return false;
+  const state = value as Partial<QuickScoreSessionState>;
+  return isTeachingContext(state.context)
+    && typeof state.date === "string"
+    && Array.isArray(state.cards)
+    && state.cards.every(isCardScore);
+}
+
 export default function QuickScoreWorkspace() {
   const [classes, setClasses] = useState<string[]>([]);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [semesters, setSemesters] = useState<Semester[]>([]);
-  const [selectedSemesterId, setSelectedSemesterId] = useState("");
-  const [selectedClass, setSelectedClass] = useState("");
-  const [selectedSessionCode, setSelectedSessionCode] = useState("");
+  const {
+    context,
+    hydrated: contextHydrated,
+    setContext,
+    setSemesterId: setSelectedSemesterId,
+    setClassName: setSelectedClass,
+    setSessionCode: setSelectedSessionCode,
+  } = useTeachingContext();
+  const {
+    semesterId: selectedSemesterId,
+    className: selectedClass,
+    sessionCode: selectedSessionCode,
+  } = context;
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const { cards, setCards, setOriginalScores, changedCards, changedCount, absentCount, setScore, togglePresent, setNote, bulkSet } = useQuickScoreWorkspace();
@@ -40,9 +79,41 @@ export default function QuickScoreWorkspace() {
 
   // Refs to avoid closure staleness in async callbacks
   const selectedClassRef = useRef(selectedClass);
+  const selectedSessionCodeRef = useRef(selectedSessionCode);
   const allStudentsRef = useRef(allStudents);
   const pendingRestoreRef = useRef<QuickScoreHistoryState | null>(null);
-  useEffect(() => { selectedClassRef.current = selectedClass; allStudentsRef.current = allStudents; }, [allStudents, selectedClass]);
+  useEffect(() => {
+    selectedClassRef.current = selectedClass;
+    selectedSessionCodeRef.current = selectedSessionCode;
+    allStudentsRef.current = allStudents;
+  }, [allStudents, selectedClass, selectedSessionCode]);
+
+  const workspaceValue = useMemo<QuickScoreSessionState>(() => ({ context, date, cards }), [cards, context, date]);
+  const { hydrated: workspaceHydrated } = useSessionWorkspace({
+    key: teachingContextWorkspaceKey("quick-score", context),
+    value: workspaceValue,
+    validate: isQuickScoreSessionState,
+    enabled: contextHydrated,
+    restore: (saved) => {
+      if (!saved) {
+        pendingRestoreRef.current = null;
+        setOriginalScores(new Map());
+        setCards([]);
+        setResult(null);
+        return;
+      }
+      pendingRestoreRef.current = {
+        semesterId: saved.context.semesterId,
+        className: saved.context.className,
+        sessionCode: saved.context.sessionCode,
+        date: saved.date,
+        cards: saved.cards,
+      };
+      setDate(saved.date);
+      setCards(saved.cards);
+      setResult(null);
+    },
+  });
 
   // --- Init ---
   const fetchData = useCallback(async () => {
@@ -55,10 +126,14 @@ export default function QuickScoreWorkspace() {
       setAllStudents(students);
       setClasses([...new Set(students.map((s) => s.class))]);
       setSemesters(semesters);
-      if (semesters.length > 0) setSelectedSemesterId(semesters[0].id);
     } catch (err) { console.error(err); }
   }, []);
   useEffect(() => { void fetchData(); }, [fetchData]);
+  useEffect(() => {
+    if (contextHydrated && workspaceHydrated && !selectedSemesterId && semesters.length > 0) {
+      setSelectedSemesterId(semesters[0].id);
+    }
+  }, [contextHydrated, semesters, selectedSemesterId, setSelectedSemesterId, workspaceHydrated]);
 
   const loadSessionCards = useCallback(async (session: SessionInfo) => {
     const cls = selectedClassRef.current;
@@ -123,8 +198,18 @@ export default function QuickScoreWorkspace() {
       const data: SessionInfo[] = await res.json();
       setSessions(data);
 
+      const pending = pendingRestoreRef.current;
+      if (pending && !pending.sessionCode) {
+        setSelectedSessionCode("");
+        setDate(pending.date);
+        setOriginalScores(new Map());
+        setCards(pending.cards);
+        pendingRestoreRef.current = null;
+        return;
+      }
+
       const today = new Date().toISOString().split("T")[0];
-      const restoredCode = pendingRestoreRef.current?.sessionCode;
+      const restoredCode = pending?.sessionCode || selectedSessionCodeRef.current;
       const restoredSession = restoredCode ? data.find((s) => s.code === restoredCode) : null;
       const todaySession = data.find((s) => s.date === today);
       const target = restoredSession || todaySession || (data.length > 0 ? data[0] : null);
@@ -137,10 +222,11 @@ export default function QuickScoreWorkspace() {
         initBlankCards();
       }
     } catch (err) { console.error(err); }
-  }, [initBlankCards, loadSessionCards, selectedClass, selectedSemesterId]);
+  }, [initBlankCards, loadSessionCards, selectedClass, selectedSemesterId, setCards, setOriginalScores, setSelectedSessionCode]);
 
   // --- When semester+class change → load sessions ---
   useEffect(() => {
+    if (!contextHydrated || !workspaceHydrated) return;
     if (!selectedSemesterId || !selectedClass) {
       setSessions([]);
       setSelectedSessionCode("");
@@ -148,7 +234,7 @@ export default function QuickScoreWorkspace() {
       return;
     }
     void fetchSessions();
-  }, [fetchSessions, selectedSemesterId, selectedClass, setCards]);
+  }, [contextHydrated, fetchSessions, selectedSemesterId, selectedClass, setCards, setSelectedSessionCode, workspaceHydrated]);
 
   // --- Session change handler (dropdown onChange) ---
   async function handleSessionChange(code: string) {
@@ -255,9 +341,7 @@ export default function QuickScoreWorkspace() {
         return;
       }
     }
-    setSelectedSemesterId(state.semesterId);
-    setSelectedClass(state.className);
-    setSelectedSessionCode(state.sessionCode);
+    setContext({ semesterId: state.semesterId, className: state.className, sessionCode: state.sessionCode });
     setDate(state.date);
     setResult(null);
     if (!state.sessionCode) {
@@ -271,7 +355,7 @@ export default function QuickScoreWorkspace() {
       <ContextHeader semesterName={sem?.name} sessionCount={sem?.sessionCount} history={<WorkHistoryButton<QuickScoreHistoryState> module="quick-score" onRestore={restoreHistory} />}>
       <div className="flex items-center gap-3 mb-2 flex-wrap">
         {/* Semester */}
-        <select value={selectedSemesterId} onChange={(e) => setSelectedSemesterId(e.target.value)}
+        <select value={selectedSemesterId} disabled={!contextHydrated || !workspaceHydrated} onChange={(e) => setSelectedSemesterId(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
         >
           {semesters.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
@@ -282,7 +366,7 @@ export default function QuickScoreWorkspace() {
         >+</button>
 
         {/* Class */}
-        <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}
+        <select value={selectedClass} disabled={!contextHydrated || !workspaceHydrated} onChange={(e) => setSelectedClass(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
         >
           <option value="">选择班级</option>

@@ -34,6 +34,37 @@ test.describe.serial("v0.17.0 information architecture", () => {
     await expect(page.getByText("E2E 班级日报：课堂状态稳定。")).toBeVisible();
   });
 
+  test("teaching context and an unfinished entry survive page switches", async ({ page }) => {
+    await page.goto("/entry?step=input");
+    await page.getByLabel("学期").selectOption(TEST_FIXTURE.semester.id);
+    await page.getByLabel("班级").selectOption({ label: TEST_FIXTURE.class.name });
+    await page.getByLabel("课次").selectOption(TEST_FIXTURE.sessions[0].code);
+    await page.getByPlaceholder("例如：今天张三测验氧化还原全对，但上课走神。李四作业没交，情绪低落。给王五的妈妈打了电话讨论近况。").fill("E2E 未提交课堂回顾");
+
+    await page.getByRole("link", { name: "班级日报" }).click();
+    await expect(page).toHaveURL(new RegExp(`semesterId=${TEST_FIXTURE.semester.id}`));
+    await expect(page.getByLabel("班级")).toHaveValue(TEST_FIXTURE.class.name);
+    await expect(page.getByLabel("课次")).toHaveValue(TEST_FIXTURE.sessions[0].code);
+
+    await page.getByRole("link", { name: "课堂录入" }).click();
+    await expect(page.getByRole("textbox")).toHaveValue("E2E 未提交课堂回顾");
+  });
+
+  test("an unsaved quick-score edit survives page switches", async ({ page }) => {
+    await page.goto("/quick-score");
+    await page.locator("select").nth(1).selectOption({ label: TEST_FIXTURE.class.name });
+    await page.locator("select").nth(2).selectOption(TEST_FIXTURE.sessions[0].code);
+    const studentCard = page.getByText(TEST_FIXTURE.students[1].name, { exact: true }).locator("..").locator("..");
+    await studentCard.getByText("学习", { exact: true }).locator("..").getByRole("button", { name: "4", exact: true }).click();
+    await expect(page.getByText("已修改 1/", { exact: false })).toBeVisible();
+
+    await page.getByRole("link", { name: "工作历史" }).click();
+    await page.getByRole("link", { name: "手动评分" }).click();
+    const restoredCard = page.getByText(TEST_FIXTURE.students[1].name, { exact: true }).locator("..").locator("..");
+    await expect(restoredCard.getByText("学习", { exact: true }).locator("..").getByRole("button", { name: "4", exact: true })).toHaveClass(/scale-110/);
+    await expect(page.getByText("已修改 1/", { exact: false })).toBeVisible();
+  });
+
   test("narrow windows use the accessible navigation drawer", async ({ page }) => {
     await page.setViewportSize({ width: 720, height: 900 });
     await page.goto("/");

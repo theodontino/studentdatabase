@@ -8,6 +8,8 @@ import WorkHistoryButton from "@/components/WorkHistoryButton";
 import { readSSEStream } from "@/lib/sse";
 import type { FeedbackContextStudent } from "@/components/wecom/types";
 import { saveWorkHistory } from "@/lib/history";
+import { useSessionWorkspace } from "@/lib/use-session-workspace";
+import { isTeachingContext, teachingContextWorkspaceKey, useTeachingContext, type TeachingContext } from "@/features/teaching-context";
 import { isLegacyFeedbackState } from "./history-adapters";
 
 interface FeedbackCard {
@@ -47,6 +49,52 @@ interface ParsedResult { students: ParsedStudent[]; alert_suggestion?: string; }
 interface ReviewResult { is_valid: boolean; issues: string[]; suggestions?: string[]; }
 interface NameCorrection { original: string; corrected: string; confidence: string; }
 
+interface FeedbackWorkspaceState {
+  context: TeachingContext;
+  newSessionDate: string;
+  rawText: string;
+  parseStatus: string;
+  streamContent: string;
+  draftId: string;
+  parsedResult: ParsedResult | null;
+  reviewResult: ReviewResult | null;
+  corrections: NameCorrection[];
+  confirmed: boolean;
+  status: string;
+  feedbackCards: FeedbackCard[];
+  feedbackTotal: number;
+  feedbackDone: number;
+  feedbackDirty: boolean;
+  forceRegenerate: boolean;
+  singleStudentId: string;
+  singleDays: number;
+  singleFeedback: string;
+}
+
+function isFeedbackWorkspace(value: unknown): value is FeedbackWorkspaceState {
+  if (!value || typeof value !== "object") return false;
+  const state = value as Partial<FeedbackWorkspaceState>;
+  return isTeachingContext(state.context)
+    && typeof state.newSessionDate === "string"
+    && typeof state.rawText === "string"
+    && typeof state.parseStatus === "string"
+    && typeof state.streamContent === "string"
+    && typeof state.draftId === "string"
+    && (state.parsedResult === null || typeof state.parsedResult === "object")
+    && (state.reviewResult === null || typeof state.reviewResult === "object")
+    && Array.isArray(state.corrections)
+    && typeof state.confirmed === "boolean"
+    && typeof state.status === "string"
+    && Array.isArray(state.feedbackCards)
+    && typeof state.feedbackTotal === "number"
+    && typeof state.feedbackDone === "number"
+    && typeof state.feedbackDirty === "boolean"
+    && typeof state.forceRegenerate === "boolean"
+    && typeof state.singleStudentId === "string"
+    && typeof state.singleDays === "number"
+    && typeof state.singleFeedback === "string";
+}
+
 function statusTone(active: boolean) {
   return active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500";
 }
@@ -60,9 +108,8 @@ function todayLocalDate() {
 }
 
 export default function FeedbackWorkspace() {
-  const [semesterId, setSemesterId] = useState("");
-  const [className, setClassName] = useState("");
-  const [sessionCode, setSessionCode] = useState("");
+  const { context, hydrated: contextHydrated, setContext, setSemesterId, setClassName, setSessionCode } = useTeachingContext();
+  const { semesterId, className, sessionCode } = context;
   const [sessionRefreshKey, setSessionRefreshKey] = useState(0);
   const [newSessionDate, setNewSessionDate] = useState(todayLocalDate);
   const [creatingSession, setCreatingSession] = useState(false);
@@ -96,6 +143,58 @@ export default function FeedbackWorkspace() {
   const [singleDays, setSingleDays] = useState(14);
   const [singleFeedback, setSingleFeedback] = useState("");
   const [singleLoading, setSingleLoading] = useState(false);
+  const workspaceValue = useMemo<FeedbackWorkspaceState>(() => ({
+    context, newSessionDate, rawText, parseStatus, streamContent, draftId, parsedResult,
+    reviewResult, corrections, confirmed, status, feedbackCards, feedbackTotal, feedbackDone,
+    feedbackDirty, forceRegenerate, singleStudentId, singleDays, singleFeedback,
+  }), [context, newSessionDate, rawText, parseStatus, streamContent, draftId, parsedResult, reviewResult, corrections, confirmed, status, feedbackCards, feedbackTotal, feedbackDone, feedbackDirty, forceRegenerate, singleStudentId, singleDays, singleFeedback]);
+  const workspace = useSessionWorkspace({
+    key: teachingContextWorkspaceKey("feedback", context),
+    value: workspaceValue,
+    validate: isFeedbackWorkspace,
+    enabled: contextHydrated,
+    restore: (saved) => {
+      if (!saved) {
+        setRawText("");
+        setParseStatus("");
+        setStreamContent("");
+        setDraftId("");
+        setParsedResult(null);
+        setReviewResult(null);
+        setCorrections([]);
+        setConfirmed(false);
+        setStatus("");
+        setFeedbackCards([]);
+        setFeedbackTotal(0);
+        setFeedbackDone(0);
+        setFeedbackDirty(false);
+        setForceRegenerate(false);
+        setSingleStudentId("");
+        setSingleFeedback("");
+        setError("");
+        return;
+      }
+      setNewSessionDate(saved.newSessionDate);
+      setRawText(saved.rawText);
+      setParseStatus(saved.parseStatus);
+      setStreamContent(saved.streamContent);
+      setDraftId(saved.draftId);
+      setParsedResult(saved.parsedResult);
+      setReviewResult(saved.reviewResult);
+      setCorrections(saved.corrections);
+      setConfirmed(saved.confirmed);
+      setFeedbackCards(saved.feedbackCards);
+      setFeedbackTotal(saved.feedbackTotal);
+      setFeedbackDone(saved.feedbackDone);
+      setFeedbackDirty(saved.feedbackDirty);
+      setForceRegenerate(saved.forceRegenerate);
+      setSingleStudentId(saved.singleStudentId);
+      setSingleDays(saved.singleDays);
+      setSingleFeedback(saved.singleFeedback);
+      setStatus(saved.status || "已恢复上次离开时的页面内容。");
+      setError("");
+    },
+  });
 
   const canParse = Boolean(rawText.trim() && sessionCode && !parsing);
   const canConfirm = Boolean(draftId && parsedResult && !confirming);
@@ -111,12 +210,13 @@ export default function FeedbackWorkspace() {
   }, []);
 
   useEffect(() => {
+    if (!workspace.hydrated) return;
     const draft = sessionStorage.getItem("chem-track:feedback-draft");
     if (!draft) return;
     setRawText(draft);
     setParseStatus("已从录音转写载入课后回顾。");
     sessionStorage.removeItem("chem-track:feedback-draft");
-  }, []);
+  }, [workspace.hydrated]);
 
   useEffect(() => {
     if (!sessionCode) {
@@ -456,11 +556,9 @@ export default function FeedbackWorkspace() {
 
   function restoreHistory(state: FeedbackHistoryState) {
     if (state.kind === "single") {
-      setSemesterId(state.semesterId); setClassName(state.className); setSessionCode(state.sessionCode); setSingleStudentId(state.studentId); setSingleDays(state.days); setSingleFeedback(state.feedback); setError(""); setStatus("已恢复单人反馈历史。"); return;
+      setContext({ semesterId: state.semesterId, className: state.className, sessionCode: state.sessionCode }); setSingleStudentId(state.studentId); setSingleDays(state.days); setSingleFeedback(state.feedback); setError(""); setStatus("已恢复单人反馈历史。"); return;
     }
-    setSemesterId(state.semesterId);
-    setClassName(state.className);
-    setSessionCode(state.sessionCode);
+    setContext({ semesterId: state.semesterId, className: state.className, sessionCode: state.sessionCode });
     setFeedbackCards(state.students);
     setFeedbackTotal(state.total);
     setFeedbackDone(state.total);
