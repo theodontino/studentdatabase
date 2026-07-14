@@ -65,7 +65,7 @@ npx tsc --noEmit
 - `src/components/ui/` 提供轻量设计系统；`src/lib/api-client.ts` 统一 JSON 请求、错误和下载行为。
 - 教学上下文使用 `semesterId`、`class`、`sessionCode` 查询参数，刷新与工作台跳转后可以恢复。
 - 录入、复核、反馈、评分、日报、导出和转写选择会在当前浏览器标签页内自动保留；凭据和未提交的本地文件不会写入恢复存储。
-- `/input`、`/review`、`/report`、`/settings`、`/system-logs` 和 `/past-overview` 是兼容入口，至少保留到 v0.18。
+- `/input`、`/review`、`/report`、`/settings`、`/system-logs` 和 `/past-overview` 在 v0.18 继续作为兼容入口；删除前必须检查书签、工作历史和外部链接。
 
 ## 许可证
 
