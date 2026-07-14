@@ -148,4 +148,13 @@ test.describe.serial("v0.17.0 information architecture", () => {
     await expect(page.getByText("测试学生")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
+
+  test("remaining management pages use stable narrow layouts", async ({ page }) => {
+    await page.setViewportSize({ width: 720, height: 900 });
+    for (const [path, heading] of [["/history", "工作历史"], ["/export", "数据导出"], ["/semesters", "学期 / 课次"]] as const) {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    }
+  });
 });
