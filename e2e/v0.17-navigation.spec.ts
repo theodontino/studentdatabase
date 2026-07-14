@@ -120,4 +120,23 @@ test.describe.serial("v0.17.0 information architecture", () => {
     await expect(page.getByRole("dialog", { name: "导入花名册" })).toBeVisible();
     await page.getByRole("button", { name: "关闭" }).click();
   });
+
+  test("LLM configuration uses recoverable status and confirmation UI", async ({ page }) => {
+    const profile = { id: "e2e-profile", name: "E2E 本地模型", apiBaseUrl: "http://127.0.0.1:65535/v1", apiKey: "local-test", model: "e2e-model", createdAt: "2026-07-14T00:00:00.000Z", updatedAt: "2026-07-14T00:00:00.000Z" };
+    await page.route("**/api/settings/llm**", async (route) => {
+      const saved = route.request().method() === "PUT";
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ activeProfileId: null, profiles: saved ? [profile] : [], effectiveSettings: { apiBaseUrl: profile.apiBaseUrl, apiKey: profile.apiKey, model: profile.model } }) });
+    });
+    await page.setViewportSize({ width: 720, height: 900 });
+    await page.goto("/system/configuration");
+    await page.getByLabel("配置名称").fill(profile.name);
+    await page.getByLabel("API Base URL").fill(profile.apiBaseUrl);
+    await page.getByLabel("API Key").fill(profile.apiKey);
+    await page.getByLabel("模型名").fill(profile.model);
+    await page.getByRole("button", { name: "仅保存" }).click();
+    await expect(page.getByText("已保存。")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "删除当前配置" }).click();
+    await expect(page.getByRole("dialog", { name: "删除当前配置" })).toBeVisible();
+  });
 });
