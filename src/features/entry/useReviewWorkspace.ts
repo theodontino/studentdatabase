@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { requestJson } from "@/lib/api-client";
+import type { AiWorkflowController } from "@/features/ai-workflow";
 import type { DraftRecordView, DraftStructuredResult, ScoreDimension } from "@/lib/types";
 import { useSessionWorkspace } from "@/lib/use-session-workspace";
 import { isReviewWorkspaceState, type ReviewFilterStatus, type ReviewWorkspaceState } from "./workspace-state";
 
-export function useReviewWorkspace() {
+export function useReviewWorkspace(workflow: AiWorkflowController) {
   const [drafts, setDrafts] = useState<DraftRecordView[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -60,6 +61,8 @@ export function useReviewWorkspace() {
     }
     setEdits((current) => current[draft.id] ? current : { ...current, [draft.id]: structuredClone(draft.parsedResult) });
     setExpandedId(draft.id);
+    workflow.start("复核课堂草案", "正在准备结构化草案…");
+    workflow.transition("reviewing", "请核对学生评分、考勤和关键事件。");
   }
 
   function updateStudent(draftId: string, studentIndex: number, update: (student: DraftStructuredResult["students"][number]) => DraftStructuredResult["students"][number]) {
@@ -87,6 +90,8 @@ export function useReviewWorkspace() {
   async function handleAction(draftId: string, action: "confirm" | "reject") {
     setProcessingId(draftId);
     setActionMessage(null);
+    workflow.start(action === "confirm" ? "确认课堂草案" : "放弃课堂草案", "正在检查草案状态…");
+    if (action === "confirm") workflow.transition("saving", "正在写入学生评价、考勤和事件…");
     try {
       const data = await requestJson<{ warnings?: string[] }>("/api/review", {
         method: "POST",
@@ -96,11 +101,15 @@ export function useReviewWorkspace() {
       setActionMessage(data.warnings?.length
         ? { tone: "warning", text: data.warnings.join("；") }
         : { tone: "success", text: action === "confirm" ? "草案已确认写入。" : "草案已放弃。" });
+      if (action === "confirm") workflow.transition("completed", "课堂草案已确认并写入正式档案。");
+      else workflow.cancel("课堂草案已放弃，未写入正式档案。");
       setExpandedId(null);
       setEdits((current) => { const next = { ...current }; delete next[draftId]; return next; });
       await fetchDrafts();
     } catch (reason) {
-      setActionMessage({ tone: "danger", text: reason instanceof Error ? reason.message : "操作失败" });
+      const message = reason instanceof Error ? reason.message : "操作失败";
+      setActionMessage({ tone: "danger", text: message });
+      workflow.fail(message, action === "confirm" ? "saving" : "reviewing");
     } finally {
       setProcessingId(null);
     }

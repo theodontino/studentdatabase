@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ConfirmDialog, Dialog, Drawer, FormField, Input, MetricCard, SaveStateIndicator, Skeleton } from "@/components/ui";
-import { entryReducer } from "@/features/entry/entry-reducer";
+import { entryReducer, INITIAL_ENTRY_STATE } from "@/features/entry/entry-reducer";
 import { ApiError, requestJson } from "@/lib/api-client";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("frontend foundation", () => {
   it("moves the entry reducer between explicit steps", () => {
-    expect(entryReducer({ step: "input" }, { type: "set-step", step: "review" })).toEqual({ step: "review" });
+    expect(entryReducer(INITIAL_ENTRY_STATE, { type: "set-step", step: "review" })).toMatchObject({ step: "review" });
   });
 
   it("renders accessible dialog and drawer semantics", () => {

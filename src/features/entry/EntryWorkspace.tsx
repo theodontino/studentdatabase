@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useReducer } from "react";
+import { useEffect, useMemo, useReducer } from "react";
 import { PageHeader, Tabs } from "@/components/ui";
+import { AiWorkflowStatus, createAiWorkflowController } from "@/features/ai-workflow";
 import InputStep from "./InputStep";
 import ReviewStep from "./ReviewStep";
-import { entryReducer, type EntryStep } from "./entry-reducer";
+import { entryReducer, INITIAL_ENTRY_STATE, type EntryStep } from "./entry-reducer";
 
 export default function EntryWorkspace() {
-  const [state, dispatch] = useReducer(entryReducer, { step: "input" });
+  const [state, dispatch] = useReducer(entryReducer, INITIAL_ENTRY_STATE);
+  const workflow = useMemo(() => createAiWorkflowController(state.workflow, (action) => dispatch({ type: "workflow", action })), [state.workflow]);
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get("step");
     const stored = sessionStorage.getItem("chem-track:entry-step");
@@ -15,5 +17,5 @@ export default function EntryWorkspace() {
     dispatch({ type: "set-step", step });
   }, []);
   function setStep(step: EntryStep) { const url = new URL(window.location.href); url.searchParams.set("step", step); window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`); sessionStorage.setItem("chem-track:entry-step", step); dispatch({ type: "set-step", step }); }
-  return <div className="mx-auto max-w-5xl"><PageHeader title="课堂录入" description="输入课堂记录、解析草案并复核确认，步骤间上下文保持连续。" /><Tabs label="录入步骤" value={state.step} onChange={(value) => setStep(value as EntryStep)} items={[{ value: "input", label: "1 输入与解析" }, { value: "review", label: "2 复核与确认" }]} /><div className="mt-6">{state.step === "input" ? <InputStep onReview={() => setStep("review")} /> : <ReviewStep />}</div></div>;
+  return <div className="mx-auto max-w-5xl"><PageHeader title="课堂录入" description="输入课堂记录、解析草案并复核确认，步骤间上下文保持连续。" /><Tabs label="录入步骤" value={state.step} onChange={(value) => setStep(value as EntryStep)} items={[{ value: "input", label: "1 输入与解析" }, { value: "review", label: "2 复核与确认" }]} /><div className="mt-4"><AiWorkflowStatus state={state.workflow} /></div><div className="mt-6">{state.step === "input" ? <InputStep workflow={workflow} onReview={() => setStep("review")} /> : <ReviewStep workflow={workflow} />}</div></div>;
 }

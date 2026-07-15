@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge, Button, EmptyState, ErrorState, FilterBar, LoadingState, Select, StatusBanner } from "@/components/ui";
+import type { AiWorkflowController } from "@/features/ai-workflow";
 import { DraftReviewEditor } from "./draft-components";
 import { useReviewWorkspace } from "./useReviewWorkspace";
 import { reviewedStudentCount, type ReviewFilterStatus } from "./workspace-state";
@@ -17,8 +18,8 @@ function emptyTitle(status: ReviewFilterStatus) {
   return "没有已放弃的记录";
 }
 
-export default function ReviewStep() {
-  const workspace = useReviewWorkspace();
+export default function ReviewStep({ workflow }: { workflow: AiWorkflowController }) {
+  const workspace = useReviewWorkspace(workflow);
   return (
     <div className="entry-review-workspace">
       <div className="entry-step-heading"><div><h2>复核中心</h2><p>核对系统生成的草案，只有确认后才会写入数据库。</p></div></div>

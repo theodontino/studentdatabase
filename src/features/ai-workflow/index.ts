@@ -1,5 +1,6 @@
 export { AiWorkflowStatus } from "./AiWorkflowStatus";
-export { useAiWorkflow } from "./use-ai-workflow";
+export { createAiWorkflowController, useAiWorkflow } from "./use-ai-workflow";
+export type { AiWorkflowController } from "./use-ai-workflow";
 export {
   aiWorkflowReducer,
   INITIAL_AI_WORKFLOW_STATE,

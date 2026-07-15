@@ -4,15 +4,15 @@ import { useRouter } from "next/navigation";
 import WorkHistoryButton from "@/components/WorkHistoryButton";
 import SemesterPicker from "@/components/SemesterPicker";
 import { Button, Section, StatusBanner, Textarea } from "@/components/ui";
-import { AiWorkflowStatus } from "@/features/ai-workflow";
+import type { AiWorkflowController } from "@/features/ai-workflow";
 import { ParseResultPreview, ReviewSummary } from "./draft-components";
 import { useInputWorkspace, type InputHistoryState } from "./useInputWorkspace";
 
 const INPUT_PLACEHOLDER = "例如：今天张三测验氧化还原全对，但上课走神。李四作业没交，情绪低落。给王五的妈妈打了电话讨论近况。";
 
-export default function InputStep({ onReview }: { onReview?: () => void }) {
+export default function InputStep({ workflow, onReview }: { workflow: AiWorkflowController; onReview?: () => void }) {
   const router = useRouter();
-  const workspace = useInputWorkspace();
+  const workspace = useInputWorkspace(workflow);
   const { context, rawText, setRawText, loading, result, error } = workspace;
 
   function openReview() {
@@ -51,7 +51,6 @@ export default function InputStep({ onReview }: { onReview?: () => void }) {
         </div>
       </Section>
 
-      <AiWorkflowStatus state={workspace.workflow} />
       {error && <StatusBanner tone="danger">{error}</StatusBanner>}
       {result && <>
         <StatusBanner tone="success">解析成功，草案已保存。<Button variant="ghost" uiSize="sm" onClick={openReview}>前往复核中心</Button></StatusBanner>

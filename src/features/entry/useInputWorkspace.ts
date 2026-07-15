@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTeachingContext, teachingContextWorkspaceKey } from "@/features/teaching-context";
-import { useAiWorkflow } from "@/features/ai-workflow";
+import type { AiWorkflowController } from "@/features/ai-workflow";
 import { requestJson } from "@/lib/api-client";
 import { saveWorkHistory } from "@/lib/history";
 import type { DraftParseResult } from "@/lib/types";
@@ -17,12 +17,11 @@ export interface InputHistoryState {
   result: DraftParseResult;
 }
 
-export function useInputWorkspace() {
+export function useInputWorkspace(workflow: AiWorkflowController) {
   const [rawText, setRawText] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DraftParseResult | null>(null);
   const [error, setError] = useState("");
-  const workflow = useAiWorkflow();
   const { context, hydrated: contextHydrated, setContext, setSemesterId, setClassName, setSessionCode } = useTeachingContext();
   const workspaceValue = useMemo<InputWorkspaceState>(() => ({ context, rawText, result, workflow: workflow.state }), [context, rawText, result, workflow.state]);
   const workspace = useSessionWorkspace({
