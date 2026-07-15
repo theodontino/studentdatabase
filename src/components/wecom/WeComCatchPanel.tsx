@@ -50,7 +50,7 @@ export default function WeComCatchPanel({ onExportText, showFeedbackLink = false
 
   return (
     <>
-      <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
+      <section className="min-w-0 bg-white border border-gray-200 rounded-lg p-5 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold text-gray-800">WeComCatch 手动同步</h3>
@@ -96,11 +96,12 @@ export default function WeComCatchPanel({ onExportText, showFeedbackLink = false
       {error && <StatusBanner tone="danger">{error}</StatusBanner>}
       {result?.warning && <StatusBanner tone="warning">{result.warning}</StatusBanner>}
       {result && (
-        <div className="rounded-lg border border-gray-200 overflow-hidden">
-          <div className="bg-gray-50 px-3 py-2 text-xs text-gray-500">
-            {result.command} · {result.scriptPath}
+        <div className="min-w-0 max-w-full rounded-lg border border-gray-200 overflow-hidden">
+          <div className="flex min-w-0 items-center gap-1 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+            <span className="shrink-0">{result.command} ·</span>
+            <span className="min-w-0 truncate" title={result.scriptPath}>{result.scriptPath}</span>
           </div>
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap p-3 text-xs text-gray-700">
+          <pre className="max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-all p-3 text-xs text-gray-700">
             {formatOutput(result) || "命令已执行，无输出。"}
           </pre>
         </div>
