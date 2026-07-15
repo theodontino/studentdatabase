@@ -28,6 +28,8 @@ function workspaceState() {
 describe("feedback workspace state", () => {
   it("keeps the existing workspace format valid", () => {
     expect(isFeedbackWorkspace(workspaceState())).toBe(true);
+    expect(isFeedbackWorkspace({ ...workspaceState(), activeStep: "review" })).toBe(true);
+    expect(isFeedbackWorkspace({ ...workspaceState(), activeStep: "unknown" })).toBe(false);
     expect(isFeedbackWorkspace({ ...workspaceState(), feedbackDone: "0" })).toBe(false);
   });
 

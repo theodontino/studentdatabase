@@ -90,12 +90,14 @@ test.describe.serial("v0.17.0 information architecture", () => {
     await page.getByLabel("学期").selectOption(TEST_FIXTURE.semester.id);
     await page.getByLabel("班级").selectOption({ label: TEST_FIXTURE.class.name });
     await page.locator("select").nth(2).selectOption(TEST_FIXTURE.sessions[0].code);
+    await page.getByRole("button", { name: "2 提取 提取课堂记录" }).click();
     const review = page.getByPlaceholder("写下这节课对反馈有用的事实。未提及学生会按缺勤补齐。");
     await review.fill("E2E 未生成反馈的课堂回顾");
 
     await page.getByRole("link", { name: "工作历史" }).click();
     await page.getByRole("link", { name: "课后反馈" }).click();
     await expect(page.getByPlaceholder("写下这节课对反馈有用的事实。未提及学生会按缺勤补齐。")).toHaveValue("E2E 未生成反馈的课堂回顾");
+    await page.getByRole("button", { name: "1 准备 选择课次与准备材料" }).click();
     await expect(page.locator("select").nth(2)).toHaveValue(TEST_FIXTURE.sessions[0].code);
   });
 

@@ -17,7 +17,9 @@ test.describe.serial("v0.17.1 student semester summaries", () => {
     await expect(stableScore).toContainText("70");
     await expect(stableScore).toContainText("评价 1 次 · 考勤 2 次");
 
-    await page.getByText(TEST_FIXTURE.students[0].name, { exact: true }).click();
+    await page.getByRole("button", { name: `预览${TEST_FIXTURE.students[0].name}的学生档案` }).click();
+    await expect(page).toHaveURL(new RegExp(`/students\\?semesterId=${TEST_FIXTURE.semester.id}`));
+    await page.getByRole("button", { name: "打开完整档案" }).click();
     await expect(page).toHaveURL(new RegExp(`/students/${TEST_FIXTURE.students[0].id}\\?semesterId=${TEST_FIXTURE.semester.id}`));
     await expect(page.getByTestId("student-semester-radar")).toContainText("本学期四维平均表现");
     await expect(page.getByTestId("student-semester-summary")).toContainText("/100");
