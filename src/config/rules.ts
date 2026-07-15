@@ -22,6 +22,14 @@ export const ALERT_RULES = {
     yellowFraction: 0.2,
     tieExpansionMultiplier: 1.5,
   },
+  studentRisk: {
+    earlySessionLimit: 4,
+    sustainedTrendPoints: 3,
+    minimumTrendDecline: 0.5,
+    minimumCoverageFraction: 0.5,
+    minimumBelowAverageFraction: 2 / 3,
+    minimumAverageGap: 0.5,
+  },
   absence: {
     redAt: 4,
     yellowAt: 2,

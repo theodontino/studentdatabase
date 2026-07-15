@@ -13,9 +13,13 @@ describe("/api/alerts", () => {
     expect(body).toHaveProperty("semester");
     expect(body).toHaveProperty("classAlerts");
     expect(body).toHaveProperty("studentAlerts");
+    expect(body).toHaveProperty("studentRisks");
+    expect(body).toHaveProperty("attendanceReminders");
     expect(body).toHaveProperty("totalStudents");
     expect(body).toHaveProperty("redCount");
     expect(body).toHaveProperty("yellowCount");
+    expect(body).toHaveProperty("warningCount");
+    expect(body).toHaveProperty("attentionCount");
   });
 
   it("classOverview has expected shape", async () => {

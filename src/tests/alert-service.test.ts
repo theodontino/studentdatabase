@@ -33,6 +33,8 @@ beforeAll(async () => {
     prisma.student.create({ data: { name: `${marker} 丙`, studentId: `${marker}-S3`, gender: "男", classId: currentClass.id } }),
   ]);
   currentStudentIds = currentStudents.map((student) => student.id);
+  const attentionLabel = await prisma.label.upsert({ where: { name: "AI内部关注：成绩表现" }, create: { name: "AI内部关注：成绩表现" }, update: {} });
+  await prisma.studentLabel.create({ data: { studentId: currentStudents[0].id, labelId: attentionLabel.id } });
 
   const oldSession = await prisma.classSession.create({
     data: { code: "2099070101", semesterId: oldSemester.id, semesterNumber: 1, date: "2099-07-01", classId: oldClass.id },
@@ -78,6 +80,7 @@ afterAll(async () => {
   await prisma.student.deleteMany({ where: { studentId: { startsWith: marker } } });
   await prisma.semester.deleteMany({ where: { id: { in: [currentSemesterId, oldSemesterId] } } });
   await prisma.class.deleteMany({ where: { id: { in: [currentClassId, oldClassId] } } });
+  await prisma.label.deleteMany({ where: { name: "AI内部关注：成绩表现", students: { none: {} } } });
 });
 
 describe("semester-isolated alert dashboard", () => {
@@ -93,15 +96,22 @@ describe("semester-isolated alert dashboard", () => {
       studentId: currentStudentIds[0],
       class: `${marker} 当前班`,
     });
+    expect(dashboard.studentRisks[0]).toMatchObject({
+      studentId: currentStudentIds[0],
+      level: "warning",
+      qualitativeReasons: ["academic-performance"],
+    });
+    expect(dashboard.studentRisks[0].signals).toHaveLength(2);
   });
 
   it("uses an explicit past semester without current-student leakage", async () => {
-    const dashboard = await getAlertDashboard({ semesterId: oldSemesterId });
+    const dashboard = await getAlertDashboard({ semesterId: oldSemesterId, now: new Date("2099-07-15T12:00:00.000Z") });
     expect(dashboard.semester?.id).toBe(oldSemesterId);
     expect(dashboard.totalStudents).toBe(1);
     expect(dashboard.classOverview).toEqual([
       expect.objectContaining({ name: `${marker} 往期班`, studentCount: 1 }),
     ]);
+    expect(dashboard.studentRisks).toEqual([]);
   });
 
   it("falls back to the semester containing the latest session between terms", async () => {

@@ -1,18 +1,28 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import {
   ALERT_RULES,
-  calculateStudentAlertCutoffs,
   evaluateAbsenceAlert,
   evaluateClassAverageAlert,
   type AlertSeverity,
 } from "@/config/rules";
+import { ATTENTION_REASON_NAMES, attentionReasonsFromLabels } from "@/lib/attention-labels";
 import { DIM_LABEL } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import {
   resolveSemester,
+  localDate,
   type ResolvedSemester,
   type SemesterResolutionOptions,
 } from "@/services/semester-service";
+import {
+  classifyStudentRisk,
+  compositeScore,
+  earlyRelativeStudentIds,
+  persistentBelowAverageSignal,
+  sustainedDeclineSignal,
+  type StudentRisk,
+  type StudentRiskSignal,
+} from "@/services/student-risk-service";
 
 export type DashboardSemester = ResolvedSemester;
 
@@ -38,6 +48,14 @@ export interface StudentAlert {
   lastActivityAt: string;
 }
 
+export interface AttendanceReminder {
+  studentId: string;
+  studentName: string;
+  className: string;
+  absenceCount: number;
+  level: "attention" | "warning";
+}
+
 export interface AlertDashboard {
   semester: DashboardSemester | null;
   classOverview: ClassOverview[];
@@ -48,9 +66,13 @@ export interface AlertDashboard {
     severity: AlertSeverity;
   }>;
   studentAlerts: StudentAlert[];
+  studentRisks: StudentRisk[];
+  attendanceReminders: AttendanceReminder[];
   totalStudents: number;
   redCount: number;
   yellowCount: number;
+  warningCount: number;
+  attentionCount: number;
 }
 
 type AlertDashboardOptions = SemesterResolutionOptions;
@@ -61,9 +83,13 @@ function emptyDashboard(semester: DashboardSemester | null): AlertDashboard {
     classOverview: [],
     classAlerts: [],
     studentAlerts: [],
+    studentRisks: [],
+    attendanceReminders: [],
     totalStudents: 0,
     redCount: 0,
     yellowCount: 0,
+    warningCount: 0,
+    attentionCount: 0,
   };
 }
 
@@ -80,8 +106,9 @@ export async function getAlertDashboard(
   const semester = await resolveSemester(db, options);
   if (!semester) return emptyDashboard(null);
 
+  const today = localDate(options.now ?? new Date());
   const sessions = await db.classSession.findMany({
-    where: { semesterId: semester.id },
+    where: { semesterId: semester.id, date: { lte: today } },
     orderBy: [{ date: "desc" }, { semesterNumber: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
@@ -122,7 +149,11 @@ export async function getAlertDashboard(
   if (studentIds.length === 0) return emptyDashboard(semester);
   const students = await db.student.findMany({
     where: { id: { in: studentIds } },
-    select: { id: true, name: true },
+    select: {
+      id: true,
+      name: true,
+      studentLabels: { select: { label: { select: { name: true } } } },
+    },
   });
   const studentById = new Map(students.map((student) => [student.id, student]));
 
@@ -193,62 +224,90 @@ export async function getAlertDashboard(
   }
   classOverview.sort((left, right) => right.lastActivityAt.localeCompare(left.lastActivityAt));
 
-  const studentAlerts: StudentAlert[] = [];
+  const metricsByStudent = new Map<string, typeof metrics>();
+  const metricsBySession = new Map<string, typeof metrics>();
+  for (const metric of metrics) {
+    metricsByStudent.set(metric.studentId, [...(metricsByStudent.get(metric.studentId) ?? []), metric]);
+    if (metric.sessionId) metricsBySession.set(metric.sessionId, [...(metricsBySession.get(metric.sessionId) ?? []), metric]);
+  }
+  const classAverageBySession = new Map<string, number>();
+  for (const [sessionId, sessionMetrics] of metricsBySession) {
+    if (sessionMetrics.length < ALERT_RULES.studentRanking.minimumStudents) continue;
+    classAverageBySession.set(sessionId, +(sessionMetrics.reduce((sum, metric) => sum + compositeScore(metric), 0) / sessionMetrics.length).toFixed(2));
+  }
+
+  const currentSemester = options.semesterId ? await resolveSemester(db, { now: options.now }) : semester;
+  const includeQualitativeFeedback = currentSemester?.id === semester.id;
+  const studentRisks: StudentRisk[] = [];
   for (const [classKey, classStudentIds] of classStudents) {
     const overview = classOverviewByKey.get(classKey);
     if (!overview) continue;
-    const averages = { A: overview.avgA, B: overview.avgB, C: overview.avgC };
-    const ranked = classStudentIds.flatMap((studentId) => {
-      const student = studentById.get(studentId);
-      const metric = latestMetricByStudent.get(studentId);
-      if (!student || !metric) return [];
-      const devA = +(metric.scoreA - averages.A).toFixed(1);
-      const devB = +(metric.scoreB - averages.B).toFixed(1);
-      const devC = +(metric.scoreC - averages.C).toFixed(1);
-      return [{ student, metric, devA, devB, devC, avgDev: +((devA + devB + devC) / 3).toFixed(1) }];
-    });
-    if (ranked.length < ALERT_RULES.studentRanking.minimumStudents) continue;
-    ranked.sort((left, right) => left.avgDev - right.avgDev);
+    const occurredClassSessionCount = sessions.filter((session) => (session.classId ?? "__school__") === classKey).length;
+    const earlyIds = occurredClassSessionCount <= ALERT_RULES.studentRisk.earlySessionLimit
+      ? earlyRelativeStudentIds(classStudentIds.flatMap((studentId) => {
+          const metric = latestMetricByStudent.get(studentId);
+          if (!metric) return [];
+          const averageDeviation = +((
+            (metric.scoreA - overview.avgA)
+            + (metric.scoreB - overview.avgB)
+            + (metric.scoreC - overview.avgC)
+          ) / 3).toFixed(1);
+          return [{ studentId, averageDeviation }];
+        }))
+      : new Set<string>();
 
-    const { red, yellow } = calculateStudentAlertCutoffs(ranked.length);
-    const expandTies = (base: number) => {
-      if (base >= ranked.length) return ranked.length;
-      const maximum = Math.min(ranked.length, Math.ceil(base * ALERT_RULES.studentRanking.tieExpansionMultiplier));
-      const boundary = ranked[base - 1].avgDev;
-      let index = base;
-      while (index < maximum && ranked[index].avgDev === boundary) index++;
-      return index;
-    };
-    const redEnd = expandTies(red);
-    const yellowEnd = expandTies(yellow);
-    const addAlert = (entry: typeof ranked[number], severity: AlertSeverity) => {
-      const belowAverage = ([
-        ["A", entry.devA, entry.metric.scoreA],
-        ["B", entry.devB, entry.metric.scoreB],
-        ["C", entry.devC, entry.metric.scoreC],
-      ] as const).filter(([, deviation]) => deviation < 0).sort((a, b) => a[1] - b[1]);
-      if (belowAverage.length === 0) return;
-      const worst = belowAverage[0];
-      studentAlerts.push({
-        studentId: entry.student.id,
-        studentName: entry.student.name,
-        class: overview.name,
-        dimension: DIM_LABEL[worst[0]],
-        score: worst[2],
-        classAvg: averages[worst[0]],
-        deviation: worst[1],
-        severity,
-        lastActivityAt: maximumDate(activityDates.get(entry.student.id) ?? []).toISOString(),
+    for (const studentId of classStudentIds) {
+      const student = studentById.get(studentId);
+      if (!student) continue;
+      const signals: StudentRiskSignal[] = [];
+      const chronologicalMetrics = [...(metricsByStudent.get(studentId) ?? [])]
+        .filter((metric) => Boolean(metric.sessionId && sessionById.has(metric.sessionId)))
+        .sort((left, right) => (sessionById.get(left.sessionId ?? "")?.rank ?? 0) - (sessionById.get(right.sessionId ?? "")?.rank ?? 0));
+      const points = chronologicalMetrics.map((metric) => ({
+        sessionId: metric.sessionId ?? "",
+        composite: compositeScore(metric),
+        classAverage: metric.sessionId ? classAverageBySession.get(metric.sessionId) ?? null : null,
+      }));
+
+      if (occurredClassSessionCount <= ALERT_RULES.studentRisk.earlySessionLimit) {
+        if (earlyIds.has(studentId)) signals.push({
+          type: "early-relative-performance",
+          label: "早期相对表现",
+          evidence: "前四次课数据仍较少，当前综合表现处于班级相对靠后区间",
+        });
+      } else {
+        const decline = sustainedDeclineSignal(points);
+        const participatedCount = studentSessionIds.get(studentId)?.size ?? occurredClassSessionCount;
+        const belowAverage = persistentBelowAverageSignal(points, participatedCount);
+        if (decline) signals.push(decline);
+        if (belowAverage) signals.push(belowAverage);
+      }
+
+      const qualitativeReasons = includeQualitativeFeedback
+        ? attentionReasonsFromLabels(student.studentLabels.map((item) => item.label.name))
+        : [];
+      if (qualitativeReasons.length > 0) signals.push({
+        type: "qualitative-feedback",
+        label: "定性反馈关注",
+        evidence: `内部反馈：${qualitativeReasons.map((reason) => ATTENTION_REASON_NAMES[reason]).join("、")}`,
       });
-    };
-    for (let index = 0; index < redEnd; index++) addAlert(ranked[index], "red");
-    for (let index = redEnd; index < yellowEnd; index++) addAlert(ranked[index], "yellow");
+      const risk = classifyStudentRisk({
+        studentId,
+        studentName: student.name,
+        className: overview.name,
+        signals,
+        qualitativeReasons,
+        lastActivityAt: maximumDate(activityDates.get(studentId) ?? []).toISOString(),
+      });
+      if (risk) studentRisks.push(risk);
+    }
   }
 
   const absenceMap = new Map<string, number>();
   for (const attendance of attendances) {
     if (!attendance.present) absenceMap.set(attendance.studentId, (absenceMap.get(attendance.studentId) ?? 0) + 1);
   }
+  const attendanceReminders: AttendanceReminder[] = [];
   for (const studentId of studentIds) {
     const student = studentById.get(studentId);
     const session = assignedSessionByStudent.get(studentId);
@@ -256,39 +315,46 @@ export async function getAlertDashboard(
     const absences = absenceMap.get(studentId) ?? 0;
     const severity = evaluateAbsenceAlert(absences);
     if (!severity) continue;
-    studentAlerts.push({
+    attendanceReminders.push({
       studentId,
       studentName: student.name,
-      class: session.class?.name ?? session.class?.code ?? "全校",
-      dimension: DIM_LABEL.D,
-      score: absences,
-      classAvg: sessions.filter((item) => item.classId === session.classId).length,
-      deviation: 0,
-      severity,
-      lastActivityAt: maximumDate(activityDates.get(studentId) ?? []).toISOString(),
+      className: session.class?.name ?? session.class?.code ?? "全校",
+      absenceCount: absences,
+      level: severity === "red" ? "warning" : "attention",
     });
   }
 
-  const deduplicated = new Map<string, StudentAlert>();
-  for (const alert of studentAlerts) {
-    const key = `${alert.studentId}|${alert.dimension}`;
-    const existing = deduplicated.get(key);
-    if (!existing || (alert.severity === "red" && existing.severity === "yellow")) deduplicated.set(key, alert);
-  }
-  const finalStudentAlerts = [...deduplicated.values()].sort((left, right) => {
-    const activityOrder = right.lastActivityAt.localeCompare(left.lastActivityAt);
-    if (activityOrder !== 0) return activityOrder;
-    if (left.severity !== right.severity) return left.severity === "red" ? -1 : 1;
-    return left.studentName.localeCompare(right.studentName, "zh-CN");
+  studentRisks.sort((left, right) => {
+    if (left.level !== right.level) return left.level === "warning" ? -1 : 1;
+    if (left.signals.length !== right.signals.length) return right.signals.length - left.signals.length;
+    return right.lastActivityAt.localeCompare(left.lastActivityAt) || left.studentName.localeCompare(right.studentName, "zh-CN");
   });
+  attendanceReminders.sort((left, right) => (left.level === right.level ? right.absenceCount - left.absenceCount : left.level === "warning" ? -1 : 1));
+  const warningCount = studentRisks.filter((risk) => risk.level === "warning").length;
+  const attentionCount = studentRisks.filter((risk) => risk.level === "attention").length;
+  const studentAlerts: StudentAlert[] = studentRisks.map((risk) => ({
+    studentId: risk.studentId,
+    studentName: risk.studentName,
+    class: risk.className,
+    dimension: risk.signals.map((signal) => signal.label).join(" + "),
+    score: risk.signals.length,
+    classAvg: 0,
+    deviation: 0,
+    severity: risk.level === "warning" ? "red" : "yellow",
+    lastActivityAt: risk.lastActivityAt,
+  }));
 
   return {
     semester,
     classOverview,
     classAlerts,
-    studentAlerts: finalStudentAlerts,
+    studentAlerts,
+    studentRisks,
+    attendanceReminders,
     totalStudents: studentById.size,
-    redCount: finalStudentAlerts.filter((alert) => alert.severity === "red").length,
-    yellowCount: finalStudentAlerts.filter((alert) => alert.severity === "yellow").length,
+    redCount: warningCount,
+    yellowCount: attentionCount,
+    warningCount,
+    attentionCount,
   };
 }
