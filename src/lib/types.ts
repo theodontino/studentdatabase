@@ -1,5 +1,7 @@
 // v0.13.1: 共享类型 — 各页面提取，避免重复定义
 
+import type { AttentionSignalCandidate } from "@/lib/attention-labels";
+
 export interface Semester {
   id: string;
   name: string;
@@ -48,6 +50,7 @@ export interface DraftStudent {
   events: string[];
   communication: { type: string; summary: string } | null;
   present?: boolean;
+  attentionSignals?: AttentionSignalCandidate[];
 }
 
 export interface DraftStructuredResult {

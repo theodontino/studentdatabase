@@ -7,11 +7,13 @@ let classId = "";
 let semesterId = "";
 let studentIds: string[] = [];
 let labelName = "";
+let internalLabelName = "";
 let currentSessionCode = "";
 
 beforeEach(async () => {
   const suffix = randomUUID().slice(0, 8);
   labelName = `#反馈上下文-${suffix}`;
+  internalLabelName = `AI内部关注：测试-${suffix}`;
   const classroom = await prisma.class.create({
     data: { code: `CTX-${suffix}`, name: `上下文测试班-${suffix}` },
   });
@@ -28,7 +30,9 @@ beforeEach(async () => {
   });
   studentIds = [student.id, studentWithoutHistory.id];
   const label = await prisma.label.create({ data: { name: labelName } });
+  const internalLabel = await prisma.label.create({ data: { name: internalLabelName } });
   await prisma.studentLabel.create({ data: { studentId: student.id, labelId: label.id } });
+  await prisma.studentLabel.create({ data: { studentId: student.id, labelId: internalLabel.id } });
 
   const previousSession = await prisma.classSession.create({
     data: { code: `CTX${suffix}01`, semesterId, semesterNumber: 1, date: "2099-03-01", classId },
@@ -83,7 +87,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await prisma.label.deleteMany({ where: { name: labelName } });
+  await prisma.label.deleteMany({ where: { name: { in: [labelName, internalLabelName] } } });
   if (semesterId) await prisma.semester.deleteMany({ where: { id: semesterId } });
   if (studentIds.length > 0) await prisma.student.deleteMany({ where: { id: { in: studentIds } } });
   if (classId) await prisma.class.deleteMany({ where: { id: classId } });
@@ -91,6 +95,7 @@ afterEach(async () => {
   semesterId = "";
   studentIds = [];
   labelName = "";
+  internalLabelName = "";
   currentSessionCode = "";
 });
 
@@ -101,10 +106,12 @@ describe("buildFeedbackContext", () => {
 
     expect(result.total).toBe(2);
     expect(student?.labels).toContain(labelName);
+    expect(student?.labels).not.toContain(internalLabelName);
     expect(student?.preview.today.join("；")).toContain("主动订正错题");
     expect(student?.preview.trend).toContain("A3/B4/C3/D5");
     expect(student?.preview.communications.join("；")).toContain("家长希望反馈时多强调进步");
     expect(student?.promptContext).toContain(labelName);
+    expect(student?.promptContext).not.toContain(internalLabelName);
     expect(student?.promptContext).toContain("近期家校沟通");
   });
 

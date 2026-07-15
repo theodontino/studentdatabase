@@ -1,5 +1,6 @@
 import { createLLMClient, getLLMModel } from "./llm";
 import { SYSTEM_PROMPT, REVIEW_PROMPT, NAME_FIX_SYSTEM_PROMPT } from "./prompts";
+import type { AttentionSignalCandidate } from "./attention-labels";
 
 export interface ParsedStudent {
   name: string;
@@ -7,6 +8,7 @@ export interface ParsedStudent {
   events: string[];
   communication: { type: string; summary: string } | null;
   present?: boolean;
+  attentionSignals?: AttentionSignalCandidate[];
 }
 
 export interface ParseResult {

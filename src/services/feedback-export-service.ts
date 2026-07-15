@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import type { PrismaClient } from "@/generated/prisma/client";
-import type { StudentAlert } from "@/services/alert-service";
+import type { StudentRisk } from "@/services/student-risk-service";
 
 export interface FeedbackExportCard {
   id: string;
@@ -14,12 +14,11 @@ function average(values: number[]) {
   return +(values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1);
 }
 
-function alertText(alerts: StudentAlert[]) {
-  return alerts.map((alert) => {
-    const severity = alert.severity === "red" ? "严重" : "关注";
-    if (alert.dimension === "考勤") return `${severity}：累计缺勤 ${alert.score} 次`;
-    return `${severity}：${alert.dimension} ${alert.score} 分（班均 ${alert.classAvg}，相差 ${alert.deviation}）`;
-  }).join("；");
+function alertText(risks: StudentRisk[]) {
+  return risks.flatMap((risk) => risk.signals
+    .filter((signal) => signal.type !== "qualitative-feedback")
+    .map((signal) => `${risk.level === "warning" ? "警告" : "关注"}：${signal.label}（${signal.evidence}）`))
+    .join("；");
 }
 
 /** Builds the standard post-class feedback workbook from persisted session data. */
@@ -27,7 +26,7 @@ export async function buildFeedbackExportWorkbook(
   prisma: PrismaClient,
   sessionCode: string,
   cards: FeedbackExportCard[],
-  alerts: StudentAlert[],
+  risks: StudentRisk[],
 ) {
   const session = await prisma.classSession.findUnique({
     where: { code: sessionCode },
@@ -64,9 +63,9 @@ export async function buildFeedbackExportWorkbook(
   for (const metric of previousMetrics) {
     if (!previousByStudent.has(metric.studentId)) previousByStudent.set(metric.studentId, metric);
   }
-  const alertsByStudent = new Map<string, StudentAlert[]>();
-  for (const alert of alerts) {
-    alertsByStudent.set(alert.studentId, [...(alertsByStudent.get(alert.studentId) ?? []), alert]);
+  const risksByStudent = new Map<string, StudentRisk[]>();
+  for (const risk of risks) {
+    risksByStudent.set(risk.studentId, [...(risksByStudent.get(risk.studentId) ?? []), risk]);
   }
 
   const rows = cards.map((card) => {
@@ -81,7 +80,7 @@ export async function buildFeedbackExportWorkbook(
       上次精神纪律: previous?.scoreB ?? "",
       上次课后任务: previous?.scoreC ?? "",
       参考家校背景: card.contextPreview?.communications?.join("；") ?? "",
-      预警: alertText(alertsByStudent.get(card.id) ?? []),
+      预警: alertText(risksByStudent.get(card.id) ?? []),
       最终反馈: card.feedback,
     };
   });

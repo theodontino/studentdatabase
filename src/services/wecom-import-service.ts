@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { normalizeAttentionSignalCandidates, type AttentionSignalCandidate } from "@/lib/attention-labels";
 import { createDatabaseBackup } from "@/services/database-backup-service";
+import { addHighConfidenceAttentionLabels } from "@/services/student-label-service";
 
 type Confidence = "high" | "medium" | "low";
 
@@ -31,6 +33,7 @@ interface WeComRecord {
     nextAction?: string | null;
   } | null;
   confidence?: Confidence | string | null;
+  attentionSignals?: unknown;
 }
 
 export interface WeComImportInput {
@@ -48,6 +51,7 @@ export interface WeComImportPlanItem {
   summary: string;
   duplicate: boolean;
   binding: "explicit_session" | "first_class_session_fallback";
+  attentionSignals: AttentionSignalCandidate[];
 }
 
 export interface WeComImportSkippedItem {
@@ -61,11 +65,13 @@ export interface WeComImportResult {
   mode: "dry-run" | "apply";
   communicationCandidateCount: number;
   aiContextCandidateCount: number;
+  attentionCandidateCount: number;
   importableCount: number;
   createCount: number;
   duplicateCount: number;
   skippedCount: number;
   createdCount: number;
+  createdLabelCount: number;
   backupPath?: string;
   plans: WeComImportPlanItem[];
   skipped: WeComImportSkippedItem[];
@@ -73,6 +79,7 @@ export interface WeComImportResult {
 
 interface InternalPlan extends WeComImportPlanItem {
   studentWithClass: { id: string; name: string; studentId: string; classId: string };
+  matchedStudentConfidence: Confidence | string | null | undefined;
 }
 
 function clean(value: unknown) {
@@ -182,6 +189,7 @@ function publicPlan(plan: InternalPlan): WeComImportPlanItem {
     summary: plan.summary,
     duplicate: plan.duplicate,
     binding: plan.binding,
+    attentionSignals: plan.attentionSignals,
   };
 }
 
@@ -193,6 +201,7 @@ export async function planWeComCommunicationImport(
   const records = Array.isArray(data.records) ? data.records : [];
   const communicationRecords = records.filter((record) => record.kind === "communication");
   const aiContextCandidateCount = records.filter((record) => record.kind === "aiContext").length;
+  const attentionCandidateCount = communicationRecords.reduce((sum, record) => sum + normalizeAttentionSignalCandidates(record.attentionSignals).length, 0);
   const includeMedium = input.includeMedium === true;
   const skipped: WeComImportSkippedItem[] = [];
   const internalPlans: InternalPlan[] = [];
@@ -236,6 +245,10 @@ export async function planWeComCommunicationImport(
       summary,
       duplicate,
       binding,
+      matchedStudentConfidence: record.matchedStudent?.confidence,
+      attentionSignals: record.matchedStudent?.confidence === "high"
+        ? normalizeAttentionSignalCandidates(record.attentionSignals).filter((candidate) => candidate.confidence === "high")
+        : [],
     });
   }
 
@@ -246,11 +259,13 @@ export async function planWeComCommunicationImport(
     mode: "dry-run",
     communicationCandidateCount: communicationRecords.length,
     aiContextCandidateCount,
+    attentionCandidateCount,
     importableCount: plans.length,
     createCount,
     duplicateCount: plans.length - createCount,
     skippedCount: skipped.length,
     createdCount: 0,
+    createdLabelCount: 0,
     plans,
     skipped,
   };
@@ -267,6 +282,7 @@ export async function applyWeComCommunicationImport(
     backupPath = (await createDatabaseBackup({ prefix: "pre-wecom-import" })).backupPath;
   }
 
+  let createdLabelCount = 0;
   await prisma.$transaction(async (tx) => {
     for (const plan of createPlans) {
       await tx.communication.create({
@@ -277,6 +293,7 @@ export async function applyWeComCommunicationImport(
           summary: plan.summary,
         },
       });
+      createdLabelCount += await addHighConfidenceAttentionLabels(tx, plan.student.id, plan.attentionSignals);
     }
   });
 
@@ -284,6 +301,7 @@ export async function applyWeComCommunicationImport(
     ...planned,
     mode: "apply",
     createdCount: createPlans.length,
+    createdLabelCount,
     backupPath,
     plans: planned.plans.map((plan) => ({ ...plan, duplicate: plan.duplicate || !createPlans.includes(plan) })),
   };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { planWeComCommunicationImport } from "@/services/wecom-import-service";
+import { applyWeComCommunicationImport, planWeComCommunicationImport } from "@/services/wecom-import-service";
 
 describe("wecom import service", () => {
   it("plans unknown-session communication with first class session fallback", async () => {
@@ -42,5 +42,32 @@ describe("wecom import service", () => {
       student: { name: student!.name, studentId: student!.studentId },
     });
     expect(result.plans[0].summary).toContain("企微长期沟通");
+  });
+
+  it("adds only high-confidence internal labels when a new communication is applied", async () => {
+    const student = await prisma.student.findFirst({ select: { id: true, name: true, studentId: true }, orderBy: { studentId: "asc" } });
+    expect(student).toBeTruthy();
+    const conversationId = `attention-${student!.id}`;
+    const jsonText = JSON.stringify({ records: [{
+      kind: "communication",
+      source: { conversationId, conversationTitle: `${student!.name}家长` },
+      matchedStudent: { id: student!.id, name: student!.name, studentId: student!.studentId, confidence: "high" },
+      target: "家长",
+      summary: `测试定性关注 ${conversationId}`,
+      attentionSignals: [
+        { reason: "parent-concern", confidence: "high", evidenceSummary: "家长明确表示担心" },
+        { reason: "withdrawal-intent", confidence: "medium", evidenceSummary: "可能考虑退班" },
+      ],
+    }] });
+
+    const applied = await applyWeComCommunicationImport(prisma, { jsonText, skipBackup: true });
+    expect(applied).toMatchObject({ createdCount: 1, createdLabelCount: 1, attentionCandidateCount: 2 });
+    await expect(prisma.studentLabel.findMany({ where: { studentId: student!.id }, include: { label: true } })).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: expect.objectContaining({ name: "AI内部关注：家长担心" }) }),
+    ]));
+
+    await prisma.communication.deleteMany({ where: { studentId: student!.id, summary: { contains: conversationId } } });
+    await prisma.studentLabel.deleteMany({ where: { studentId: student!.id, label: { name: "AI内部关注：家长担心" } } });
+    await prisma.label.deleteMany({ where: { name: "AI内部关注：家长担心", students: { none: {} } } });
   });
 });

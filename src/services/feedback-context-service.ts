@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
+import { publicStudentLabels } from "@/lib/attention-labels";
 
 const RECENT_SESSION_LIMIT = 5;
 const COMMUNICATION_LIMIT = 3;
@@ -189,7 +190,7 @@ export async function buildFeedbackContext(
   const communicationsByStudent = groupByStudent(communications);
 
   const contextStudents = students.map((student): FeedbackContextStudent => {
-    const labels = student.studentLabels.map((item) => item.label.name);
+    const labels = publicStudentLabels(student.studentLabels.map((item) => item.label.name));
     const currentEventTexts = (currentEventsByStudent.get(student.id) ?? []).map((event) => event.description);
     const today = buildTodayPreview({
       metric: currentMetricMap.get(student.id),

@@ -84,6 +84,12 @@ ${JSON.stringify(roster, null, 2)}
 5. 没有明确课次时 sessionCode 填 null。
 6. summaryForChemTrack 要写成适合 Chem-Track 入库的摘要，保留“家长关注点、学生状态、后续反馈口径或行动建议”。
 7. feedbackContext.toneHint 和 nextAction 用于之后生成家长反馈，必须简短可执行。
+8. 同时从文字事实识别内部关注信号 attentionSignals：
+   - academic-performance：明确说成绩差、退步、跟不上；
+   - learning-confidence：明确说没信心、自我否定、畏难；
+   - parent-concern：家长明确表达担心、焦虑；
+   - withdrawal-intent：学生或家长表达退班意向。
+   每项必须包含 reason、confidence=high|medium|low、evidenceSummary。不要根据数字或模糊语气猜测；没有时输出 []。
 
 record 示例：
 {
@@ -96,6 +102,7 @@ record 示例：
   "summary": "原始沟通要点摘要",
   "summaryForChemTrack": "面向 Chem-Track 的家校沟通摘要",
   "feedbackContext": { "toneHint": "语气提示", "nextAction": "下一步建议" },
+  "attentionSignals": [{ "reason": "parent-concern", "confidence": "high", "evidenceSummary": "家长明确担心近期学习状态" }],
   "confidence": "high"
 }
 

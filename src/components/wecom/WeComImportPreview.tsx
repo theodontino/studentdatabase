@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ConfirmDialog, StatusBanner } from "@/components/ui";
 import { requestJson } from "@/lib/api-client";
+import { ATTENTION_REASON_NAMES } from "@/lib/attention-labels";
 import type { WeComCandidatePath, WeComImportResult } from "./types";
 
 interface WeComImportPreviewProps {
@@ -94,7 +95,7 @@ export default function WeComImportPreview({
         }),
       });
       setResult(data);
-      setStatus(apply ? `已写入 ${data.createdCount} 条家校沟通记录。` : "预览完成，尚未写入。");
+      setStatus(apply ? `已写入 ${data.createdCount} 条家校沟通记录，新增 ${data.createdLabelCount} 个内部关注标签。` : "预览完成，尚未写入。");
       if (apply) onApplied?.(data);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "企微导入失败");
@@ -214,13 +215,15 @@ export default function WeComImportPreview({
 
       {result && (
         <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-px bg-gray-200 text-center text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-px bg-gray-200 text-center text-sm">
             <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">沟通候选</div><div className="font-semibold text-gray-800">{result.communicationCandidateCount}</div></div>
             <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">可入库</div><div className="font-semibold text-gray-800">{result.importableCount}</div></div>
             <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">将新增</div><div className="font-semibold text-green-700">{result.createCount}</div></div>
             <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">重复</div><div className="font-semibold text-gray-800">{result.duplicateCount}</div></div>
             <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">跳过</div><div className="font-semibold text-amber-700">{result.skippedCount}</div></div>
             <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">AI 上下文</div><div className="font-semibold text-gray-800">{result.aiContextCandidateCount}</div></div>
+            <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">内部关注候选</div><div className="font-semibold text-blue-700">{result.attentionCandidateCount}</div></div>
+            <div className="bg-gray-50 p-3"><div className="text-xs text-gray-400">新增内部标签</div><div className="font-semibold text-blue-700">{result.createdLabelCount}</div></div>
           </div>
 
           <div className="p-4 space-y-4">
@@ -242,6 +245,7 @@ export default function WeComImportPreview({
                         {plan.duplicate && <span className="text-amber-700 bg-amber-50 border border-amber-100 rounded px-1.5">重复</span>}
                       </div>
                       <p className="text-sm text-gray-700 leading-6">{plan.summary}</p>
+                      {plan.attentionSignals.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{plan.attentionSignals.map((signal) => <span key={signal.reason} className="rounded border border-blue-100 bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700">内部关注：{ATTENTION_REASON_NAMES[signal.reason]}</span>)}</div>}
                     </div>
                   ))}
                 </div>

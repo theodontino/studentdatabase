@@ -38,6 +38,7 @@ describe("wecom bridge service", () => {
       bridgeJson: { source: "wecomcatch", mode: "candidateOnly", records: [] },
     });
     expect(mocks.studentFindMany).toHaveBeenCalledOnce();
+    expect(mocks.completionCreate.mock.calls[0][0].messages[0].content).toContain("attentionSignals");
   });
 
   it("rejects invalid LLM JSON before import or database writes can happen", async () => {

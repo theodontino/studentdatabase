@@ -65,6 +65,7 @@ afterEach(async () => {
   if (semesterId) await prisma.semester.deleteMany({ where: { id: semesterId } });
   if (studentIds.length > 0) await prisma.student.deleteMany({ where: { id: { in: studentIds } } });
   if (classId) await prisma.class.deleteMany({ where: { id: classId } });
+  await prisma.label.deleteMany({ where: { name: "AI内部关注：学习信心", students: { none: {} } } });
   classId = "";
   classCode = "";
   semesterId = "";
@@ -144,6 +145,7 @@ describe("core transactional workflows", () => {
               events: ["测验进步"],
               communication: { type: "家长微信", summary: "已同步学习情况" },
               present: false,
+              attentionSignals: [{ reason: "learning-confidence", confidence: "high", evidenceSummary: "学生明确表示最近没有信心" }],
             },
             {
               name: students[1].name,
@@ -172,6 +174,7 @@ describe("core transactional workflows", () => {
     });
     expect(await prisma.event.count({ where: { sessionId, studentId: students[0].id } })).toBe(1);
     expect(await prisma.communication.count({ where: { sessionId, studentId: students[0].id } })).toBe(1);
+    await expect(prisma.studentLabel.findFirst({ where: { studentId: students[0].id, label: { name: "AI内部关注：学习信心" } }, include: { label: true } })).resolves.toMatchObject({ label: { name: "AI内部关注：学习信心" } });
   });
 
   it("validates class selection and archives metrics before deleting a session", async () => {

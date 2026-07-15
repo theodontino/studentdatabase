@@ -42,12 +42,10 @@ describe("feedback export service", () => {
       [{
         studentId: "student-2",
         studentName: "学生乙",
-        class: "测试班",
-        dimension: "学习&测验",
-        score: 2,
-        classAvg: 3,
-        deviation: -1,
-        severity: "yellow",
+        className: "测试班",
+        level: "attention",
+        signals: [{ type: "persistent-below-average", label: "长期低于同期班均", evidence: "3/4 次低于同期班均，平均相差 1 分" }],
+        qualitativeReasons: [],
         lastActivityAt: "2026-07-08T00:00:00.000Z",
       }],
     );
@@ -70,7 +68,7 @@ describe("feedback export service", () => {
         姓名: "学生乙",
         本次学习测验: 2,
         上次课后任务: 2,
-        预警: "关注：学习&测验 2 分（班均 3，相差 -1）",
+        预警: "关注：长期低于同期班均（3/4 次低于同期班均，平均相差 1 分）",
         最终反馈: "乙最终反馈",
       }),
       expect.objectContaining({
@@ -85,7 +83,7 @@ describe("feedback export service", () => {
     ]);
   });
 
-  it("leaves unavailable scores blank and formats attendance alerts", async () => {
+  it("leaves unavailable scores blank and excludes internal qualitative labels", async () => {
     const prisma = {
       classSession: {
         findUnique: vi.fn().mockResolvedValue({
@@ -106,12 +104,10 @@ describe("feedback export service", () => {
       [{
         studentId: "student-1",
         studentName: "学生甲",
-        class: "测试班",
-        dimension: "考勤",
-        score: 2,
-        classAvg: 5,
-        deviation: -2,
-        severity: "yellow",
+        className: "测试班",
+        level: "attention",
+        signals: [{ type: "qualitative-feedback", label: "定性反馈关注", evidence: "内部反馈：家长担心" }],
+        qualitativeReasons: ["parent-concern"],
         lastActivityAt: "2026-07-08T00:00:00.000Z",
       }],
     );
@@ -124,7 +120,7 @@ describe("feedback export service", () => {
       姓名: "学生甲",
       本次学习测验: "",
       上次学习测验: "",
-      预警: "关注：累计缺勤 2 次",
+      预警: "",
     });
     expect(rows[1]).toMatchObject({ 姓名: "班级均分", 本次学习测验: "" });
   });

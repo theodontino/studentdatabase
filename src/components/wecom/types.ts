@@ -1,3 +1,5 @@
+import type { AttentionSignalCandidate } from "@/lib/attention-labels";
+
 export interface WeComImportPlanItem {
   student: { id: string; name: string; studentId: string };
   session: { id: string; code: string; date: string; semesterNumber: number };
@@ -7,6 +9,7 @@ export interface WeComImportPlanItem {
   summary: string;
   duplicate: boolean;
   binding: "explicit_session" | "first_class_session_fallback";
+  attentionSignals: AttentionSignalCandidate[];
 }
 
 export interface WeComImportSkippedItem {
@@ -20,11 +23,13 @@ export interface WeComImportResult {
   mode: "dry-run" | "apply";
   communicationCandidateCount: number;
   aiContextCandidateCount: number;
+  attentionCandidateCount: number;
   importableCount: number;
   createCount: number;
   duplicateCount: number;
   skippedCount: number;
   createdCount: number;
+  createdLabelCount: number;
   backupPath?: string;
   plans: WeComImportPlanItem[];
   skipped: WeComImportSkippedItem[];

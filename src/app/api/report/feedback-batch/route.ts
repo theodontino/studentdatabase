@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
     prisma,
     sessionCode,
     state.students,
-    dashboard.studentAlerts,
+    dashboard.studentRisks,
   );
   return new Response(buffer as BodyInit, {
     headers: {

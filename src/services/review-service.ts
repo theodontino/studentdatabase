@@ -1,10 +1,12 @@
 import { normalizeDimensionScore, SCORE_RULES } from "@/config/rules";
+import { normalizeAttentionSignalCandidates } from "@/lib/attention-labels";
 import { archiveMetricBeforeUpdate } from "@/lib/archive";
 import { logAction } from "@/lib/logger";
 import type { ParseResult, ParsedStudent } from "@/lib/parser";
 import { prisma } from "@/lib/prisma";
 import { recalculateScoreDForStudents } from "@/lib/scoreD";
 import { ServiceError } from "@/services/service-error";
+import { addHighConfidenceAttentionLabels } from "@/services/student-label-service";
 
 type ReviewAction = "confirm" | "reject";
 
@@ -61,6 +63,7 @@ function normalizeStudent(value: unknown): ParsedStudent {
     },
     events,
     communication,
+    attentionSignals: normalizeAttentionSignalCandidates(value.attentionSignals),
     ...(typeof value.present === "boolean" ? { present: value.present } : {}),
   };
 }
@@ -156,6 +159,8 @@ export async function processDraftReview(input: ProcessDraftInput) {
       const student = matches[0];
       affectedStudentIds.push(student.id);
       const hasScores = Object.values(parsedStudent.scores).some((score) => score !== null);
+
+      await addHighConfidenceAttentionLabels(tx, student.id, parsedStudent.attentionSignals ?? []);
 
       if (hasScores) {
         const scoreA = parsedStudent.scores.A ?? SCORE_RULES.default;
