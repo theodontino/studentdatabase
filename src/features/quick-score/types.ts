@@ -34,3 +34,5 @@ export interface QuickScoreSaveResult {
   count: number;
   attUpdated: number;
 }
+
+export type QuickScoreNotice = { tone: "info" | "success" | "danger"; message: string };
