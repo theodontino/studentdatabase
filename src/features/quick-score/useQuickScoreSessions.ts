@@ -6,6 +6,7 @@ import { teachingContextWorkspaceKey } from "@/features/teaching-context";
 import type { CardScore, SessionInfo } from "@/lib/types";
 import { useSessionWorkspace } from "@/lib/use-session-workspace";
 import { createQuickScoreSession, deleteQuickScoreSession, loadQuickScoreSession, loadQuickScoreSessions } from "./api";
+import { selectQuickScoreSession, shouldApplyQuickScoreRequest } from "./session-helpers";
 import type { OriginalScore } from "./useQuickScoreWorkspace";
 import type {
   QuickScoreHistoryState,
@@ -50,16 +51,20 @@ export function useQuickScoreSessions({
   const [recordingClass, setRecordingClass] = useState(false);
   const [deletingSession, setDeletingSession] = useState(false);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const semesterRef = useRef(semesterId);
   const classRef = useRef(className);
   const sessionCodeRef = useRef(sessionCode);
   const studentsRef = useRef(students);
   const pendingRestoreRef = useRef<QuickScoreHistoryState | null>(null);
+  const sessionsRequestRef = useRef(0);
+  const cardsRequestRef = useRef(0);
 
   useEffect(() => {
+    semesterRef.current = semesterId;
     classRef.current = className;
     sessionCodeRef.current = sessionCode;
     studentsRef.current = students;
-  }, [className, sessionCode, students]);
+  }, [className, semesterId, sessionCode, students]);
 
   const workspaceValue = useMemo<QuickScoreSessionState>(() => ({ context, date, cards }), [cards, context, date]);
   const { hydrated: workspaceHydrated } = useSessionWorkspace({
@@ -89,6 +94,8 @@ export function useQuickScoreSessions({
   });
 
   const loadSessionCards = useCallback(async (session: SessionInfo) => {
+    const requestId = ++cardsRequestRef.current;
+    const selectedSemester = semesterRef.current;
     const selectedClass = classRef.current;
     const classStudents = studentsRef.current.filter((student) => student.class === selectedClass);
     setDate(session.date);
@@ -96,6 +103,14 @@ export function useQuickScoreSessions({
     setNotice(null);
     try {
       const data = await loadQuickScoreSession(selectedClass, session.code);
+      if (!shouldApplyQuickScoreRequest({
+        requestId,
+        latestRequestId: cardsRequestRef.current,
+        requestedSemesterId: selectedSemester,
+        currentSemesterId: semesterRef.current,
+        requestedClassName: selectedClass,
+        currentClassName: classRef.current,
+      })) return false;
       const scoreMap = new Map(data.scores.map((score) => [score.studentId, score]));
       setOriginalScores(new Map(data.scores.map((score) => [score.studentId, {
         scoreA: score.scoreA,
@@ -126,6 +141,14 @@ export function useQuickScoreSessions({
       }
       return true;
     } catch (error) {
+      if (!shouldApplyQuickScoreRequest({
+        requestId,
+        latestRequestId: cardsRequestRef.current,
+        requestedSemesterId: selectedSemester,
+        currentSemesterId: semesterRef.current,
+        requestedClassName: selectedClass,
+        currentClassName: classRef.current,
+      })) return false;
       setNotice({ tone: "danger", message: error instanceof Error ? error.message : "加载课次评分失败" });
       return false;
     }
@@ -137,9 +160,20 @@ export function useQuickScoreSessions({
   }, [setCards]);
 
   const fetchSessions = useCallback(async () => {
+    const requestId = ++sessionsRequestRef.current;
+    const requestedSemesterId = semesterId;
+    const requestedClassName = className;
     setNotice(null);
     try {
       const data = await loadQuickScoreSessions(semesterId, className);
+      if (!shouldApplyQuickScoreRequest({
+        requestId,
+        latestRequestId: sessionsRequestRef.current,
+        requestedSemesterId,
+        currentSemesterId: semesterRef.current,
+        requestedClassName,
+        currentClassName: classRef.current,
+      })) return false;
       setSessions(data);
       const pending = pendingRestoreRef.current;
       if (pending && !pending.sessionCode) {
@@ -152,9 +186,7 @@ export function useQuickScoreSessions({
       }
       const today = new Date().toISOString().split("T")[0];
       const restoredCode = pending?.sessionCode || sessionCodeRef.current;
-      const restoredSession = restoredCode ? data.find((session) => session.code === restoredCode) : null;
-      const todaySession = data.find((session) => session.date === today);
-      const target = restoredSession || todaySession || data[0] || null;
+      const target = selectQuickScoreSession(data, restoredCode, today);
       if (target) {
         setSessionCode(target.code);
         return loadSessionCards(target);
@@ -163,6 +195,14 @@ export function useQuickScoreSessions({
       initBlankCards();
       return true;
     } catch (error) {
+      if (!shouldApplyQuickScoreRequest({
+        requestId,
+        latestRequestId: sessionsRequestRef.current,
+        requestedSemesterId,
+        currentSemesterId: semesterRef.current,
+        requestedClassName,
+        currentClassName: classRef.current,
+      })) return false;
       setNotice({ tone: "danger", message: error instanceof Error ? error.message : "加载课次列表失败" });
       return false;
     }
@@ -171,6 +211,8 @@ export function useQuickScoreSessions({
   useEffect(() => {
     if (!contextHydrated || !workspaceHydrated) return;
     if (!semesterId || !className) {
+      sessionsRequestRef.current += 1;
+      cardsRequestRef.current += 1;
       setSessions([]);
       setSessionCode("");
       setCards([]);
@@ -181,7 +223,7 @@ export function useQuickScoreSessions({
 
   async function changeSession(code: string) {
     setSessionCode(code);
-    if (!code) { setCards([]); return; }
+    if (!code) { cardsRequestRef.current += 1; setCards([]); return; }
     const session = sessions.find((item) => item.code === code);
     if (session) await loadSessionCards(session);
   }
