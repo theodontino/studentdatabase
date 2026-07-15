@@ -33,6 +33,9 @@ beforeAll(async () => {
     prisma.student.create({ data: { name: `${marker} 丙`, studentId: `${marker}-S3`, gender: "男", classId: currentClass.id } }),
   ]);
   currentStudentIds = currentStudents.map((student) => student.id);
+  const futureOnlyStudent = await prisma.student.create({
+    data: { name: `${marker} 未来学生`, studentId: `${marker}-S4`, gender: "女", classId: currentClass.id },
+  });
   const attentionLabel = await prisma.label.upsert({ where: { name: "AI内部关注：成绩表现" }, create: { name: "AI内部关注：成绩表现" }, update: {} });
   await prisma.studentLabel.create({ data: { studentId: currentStudents[0].id, labelId: attentionLabel.id } });
 
@@ -42,6 +45,9 @@ beforeAll(async () => {
   const currentSession = await prisma.classSession.create({
     data: { code: "2099071001", semesterId: currentSemester.id, semesterNumber: 1, date: "2099-07-10", classId: currentClass.id },
   });
+  const futureSession = await prisma.classSession.create({
+    data: { code: "2099073001", semesterId: currentSemester.id, semesterNumber: 2, date: "2099-07-30", classId: currentClass.id },
+  });
 
   await prisma.attendance.create({ data: { sessionId: oldSession.id, studentId: oldStudent.id, present: true } });
   await prisma.sessionMetric.create({
@@ -49,6 +55,10 @@ beforeAll(async () => {
   });
   await prisma.attendance.createMany({
     data: currentStudents.map((student) => ({ sessionId: currentSession.id, studentId: student.id, present: true })),
+  });
+  await prisma.attendance.create({ data: { sessionId: futureSession.id, studentId: futureOnlyStudent.id, present: false } });
+  await prisma.sessionMetric.create({
+    data: { sessionId: futureSession.id, studentId: futureOnlyStudent.id, date: futureSession.date, scoreA: 1, scoreB: 1, scoreC: 1, scoreD: 0, operator: "teacher" },
   });
   const scores = [[1, 1, 1], [2, 2, 2], [5, 5, 5]];
   for (let index = 0; index < currentStudents.length; index++) {
@@ -88,6 +98,8 @@ describe("semester-isolated alert dashboard", () => {
     const dashboard = await getAlertDashboard({ now: new Date("2099-07-15T12:00:00.000Z") });
     expect(dashboard.semester?.id).toBe(currentSemesterId);
     expect(dashboard.totalStudents).toBe(3);
+    expect(dashboard.studentRisks.every((risk) => !risk.studentName.includes("未来学生"))).toBe(true);
+    expect(dashboard.attendanceReminders.every((reminder) => !reminder.studentName.includes("未来学生"))).toBe(true);
     expect(dashboard.classOverview).toEqual([
       expect.objectContaining({ name: `${marker} 当前班`, studentCount: 3 }),
     ]);

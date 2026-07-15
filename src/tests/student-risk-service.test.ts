@@ -4,6 +4,7 @@ import {
   earlyRelativeStudentIds,
   persistentBelowAverageSignal,
   sustainedDeclineSignal,
+  usesEarlyRelativePerformance,
   type RiskMetricPoint,
 } from "@/services/student-risk-service";
 
@@ -12,6 +13,11 @@ function point(composite: number, classAverage: number | null = 3.5, index = 0):
 }
 
 describe("student risk rules", () => {
+  it("switches from early ranking to longitudinal rules after the fourth occurred session", () => {
+    expect(usesEarlyRelativePerformance(4)).toBe(true);
+    expect(usesEarlyRelativePerformance(5)).toBe(false);
+  });
+
   it("keeps early ranking as one signal bucket and expands boundary ties", () => {
     const ids = earlyRelativeStudentIds([
       { studentId: "a", averageDeviation: -1 },

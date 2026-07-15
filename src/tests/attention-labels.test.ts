@@ -19,4 +19,18 @@ describe("internal attention labels", () => {
     expect(publicStudentLabels(labels)).toEqual(["踏实"]);
     expect(attentionReasonsFromLabels(labels)).toEqual(["academic-performance", "parent-concern"]);
   });
+
+  it("maps all four controlled qualitative reasons without creating extra risk buckets", () => {
+    expect(attentionReasonsFromLabels([
+      "AI内部关注：成绩表现",
+      "AI内部关注：学习信心",
+      "AI内部关注：家长担心",
+      "AI内部关注：退班意向",
+    ])).toEqual([
+      "academic-performance",
+      "learning-confidence",
+      "parent-concern",
+      "withdrawal-intent",
+    ]);
+  });
 });

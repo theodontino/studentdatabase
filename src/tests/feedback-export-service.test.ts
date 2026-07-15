@@ -105,8 +105,11 @@ describe("feedback export service", () => {
         studentId: "student-1",
         studentName: "学生甲",
         className: "测试班",
-        level: "attention",
-        signals: [{ type: "qualitative-feedback", label: "定性反馈关注", evidence: "内部反馈：家长担心" }],
+        level: "warning",
+        signals: [
+          { type: "persistent-below-average", label: "长期低于同期班均", evidence: "3/4 次低于同期班均" },
+          { type: "qualitative-feedback", label: "定性反馈关注", evidence: "内部反馈：家长担心" },
+        ],
         qualitativeReasons: ["parent-concern"],
         lastActivityAt: "2026-07-08T00:00:00.000Z",
       }],
@@ -120,8 +123,11 @@ describe("feedback export service", () => {
       姓名: "学生甲",
       本次学习测验: "",
       上次学习测验: "",
-      预警: "",
+      预警: "关注：长期低于同期班均（3/4 次低于同期班均）",
     });
+    expect(rows[0].预警).not.toContain("定性反馈");
+    expect(rows[0].预警).not.toContain("家长担心");
+    expect(rows[0].预警).not.toContain("警告");
     expect(rows[1]).toMatchObject({ 姓名: "班级均分", 本次学习测验: "" });
   });
 });

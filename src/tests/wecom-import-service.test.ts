@@ -66,8 +66,10 @@ describe("wecom import service", () => {
       expect.objectContaining({ label: expect.objectContaining({ name: "AI内部关注：家长担心" }) }),
     ]));
 
-    await prisma.communication.deleteMany({ where: { studentId: student!.id, summary: { contains: conversationId } } });
     await prisma.studentLabel.deleteMany({ where: { studentId: student!.id, label: { name: "AI内部关注：家长担心" } } });
+    await expect(applyWeComCommunicationImport(prisma, { jsonText, skipBackup: true })).resolves.toMatchObject({ createdCount: 0, createdLabelCount: 0 });
+    await expect(prisma.studentLabel.findFirst({ where: { studentId: student!.id, label: { name: "AI内部关注：家长担心" } } })).resolves.toBeNull();
+    await prisma.communication.deleteMany({ where: { studentId: student!.id, summary: { contains: conversationId } } });
     await prisma.label.deleteMany({ where: { name: "AI内部关注：家长担心", students: { none: {} } } });
   });
 });

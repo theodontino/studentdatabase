@@ -77,11 +77,6 @@ export interface WeComImportResult {
   skipped: WeComImportSkippedItem[];
 }
 
-interface InternalPlan extends WeComImportPlanItem {
-  studentWithClass: { id: string; name: string; studentId: string; classId: string };
-  matchedStudentConfidence: Confidence | string | null | undefined;
-}
-
 function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -179,20 +174,6 @@ async function resolveSession(prisma: PrismaClient, record: WeComRecord, student
     : { session: null, binding: "first_class_session_fallback" as const, reason: "fallback_session_not_found" };
 }
 
-function publicPlan(plan: InternalPlan): WeComImportPlanItem {
-  return {
-    student: plan.student,
-    session: plan.session,
-    source: plan.source,
-    occurredAt: plan.occurredAt,
-    target: plan.target,
-    summary: plan.summary,
-    duplicate: plan.duplicate,
-    binding: plan.binding,
-    attentionSignals: plan.attentionSignals,
-  };
-}
-
 export async function planWeComCommunicationImport(
   prisma: PrismaClient,
   input: WeComImportInput
@@ -204,7 +185,7 @@ export async function planWeComCommunicationImport(
   const attentionCandidateCount = communicationRecords.reduce((sum, record) => sum + normalizeAttentionSignalCandidates(record.attentionSignals).length, 0);
   const includeMedium = input.includeMedium === true;
   const skipped: WeComImportSkippedItem[] = [];
-  const internalPlans: InternalPlan[] = [];
+  const plans: WeComImportPlanItem[] = [];
 
   for (const record of communicationRecords) {
     const title = clean(record.source?.conversationTitle);
@@ -232,8 +213,7 @@ export async function planWeComCommunicationImport(
       where: { studentId: student.id, sessionId: session.id, summary },
       select: { id: true },
     }));
-    internalPlans.push({
-      studentWithClass: student,
+    plans.push({
       student: { id: student.id, name: student.name, studentId: student.studentId },
       session,
       source: {
@@ -245,14 +225,12 @@ export async function planWeComCommunicationImport(
       summary,
       duplicate,
       binding,
-      matchedStudentConfidence: record.matchedStudent?.confidence,
       attentionSignals: record.matchedStudent?.confidence === "high"
         ? normalizeAttentionSignalCandidates(record.attentionSignals).filter((candidate) => candidate.confidence === "high")
         : [],
     });
   }
 
-  const plans = internalPlans.map(publicPlan);
   const createCount = plans.filter((plan) => !plan.duplicate).length;
   return {
     sourceLabel,

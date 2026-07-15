@@ -33,6 +33,10 @@ export function compositeScore(metric: { scoreA: number; scoreB: number; scoreC:
   return +((metric.scoreA + metric.scoreB + metric.scoreC) / 3).toFixed(2);
 }
 
+export function usesEarlyRelativePerformance(occurredSessionCount: number) {
+  return occurredSessionCount <= ALERT_RULES.studentRisk.earlySessionLimit;
+}
+
 export function sustainedDeclineSignal(points: RiskMetricPoint[]): StudentRiskSignal | null {
   const latest = points.slice(-ALERT_RULES.studentRisk.sustainedTrendPoints);
   if (latest.length < ALERT_RULES.studentRisk.sustainedTrendPoints) return null;

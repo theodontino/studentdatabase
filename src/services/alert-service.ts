@@ -20,6 +20,7 @@ import {
   earlyRelativeStudentIds,
   persistentBelowAverageSignal,
   sustainedDeclineSignal,
+  usesEarlyRelativePerformance,
   type StudentRisk,
   type StudentRiskSignal,
 } from "@/services/student-risk-service";
@@ -243,7 +244,7 @@ export async function getAlertDashboard(
     const overview = classOverviewByKey.get(classKey);
     if (!overview) continue;
     const occurredClassSessionCount = sessions.filter((session) => (session.classId ?? "__school__") === classKey).length;
-    const earlyIds = occurredClassSessionCount <= ALERT_RULES.studentRisk.earlySessionLimit
+    const earlyIds = usesEarlyRelativePerformance(occurredClassSessionCount)
       ? earlyRelativeStudentIds(classStudentIds.flatMap((studentId) => {
           const metric = latestMetricByStudent.get(studentId);
           if (!metric) return [];
@@ -269,7 +270,7 @@ export async function getAlertDashboard(
         classAverage: metric.sessionId ? classAverageBySession.get(metric.sessionId) ?? null : null,
       }));
 
-      if (occurredClassSessionCount <= ALERT_RULES.studentRisk.earlySessionLimit) {
+      if (usesEarlyRelativePerformance(occurredClassSessionCount)) {
         if (earlyIds.has(studentId)) signals.push({
           type: "early-relative-performance",
           label: "早期相对表现",

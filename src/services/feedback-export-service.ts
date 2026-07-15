@@ -15,10 +15,11 @@ function average(values: number[]) {
 }
 
 function alertText(risks: StudentRisk[]) {
-  return risks.flatMap((risk) => risk.signals
-    .filter((signal) => signal.type !== "qualitative-feedback")
-    .map((signal) => `${risk.level === "warning" ? "警告" : "关注"}：${signal.label}（${signal.evidence}）`))
-    .join("；");
+  return risks.flatMap((risk) => {
+    const publicSignals = risk.signals.filter((signal) => signal.type !== "qualitative-feedback");
+    const publicLevel = publicSignals.length >= 2 ? "警告" : "关注";
+    return publicSignals.map((signal) => `${publicLevel}：${signal.label}（${signal.evidence}）`);
+  }).join("；");
 }
 
 /** Builds the standard post-class feedback workbook from persisted session data. */
