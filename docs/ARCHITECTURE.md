@@ -12,7 +12,7 @@ App Router 页面只组合 Feature 工作台或执行兼容重定向。交互状
 
 未提交的页面工作状态使用带版本包装的标签页级 `sessionStorage` 保留，涉及教学数据的工作台按“页面 + 学期 + 班级 + 课次”隔离，避免把旧草稿恢复到另一课次。工作台只能通过 `src/lib/session-workspace.ts` 和对应 hook 读写，必须校验恢复数据，版本不匹配时放弃恢复。该存储用于切换页面和刷新后继续当前工作，不替代数据库 `WorkHistory`。凭据、API Key、未提交的 `File`/`Blob` 和录音流不得写入页面工作状态；浏览器无法安全恢复的本地文件必须在离页前提醒。已创建的转写任务只保留任务 ID，结果仍从服务端任务目录读取。
 
-展示型 TSX 由 Playwright 覆盖关键工作流和窄屏导航；Vitest 覆盖 API、服务、纯函数、reducer、URL 与历史适配器。这样页面从 `app/` 迁入 Feature 时不会改变覆盖率统计口径。
+展示型 TSX 由 Playwright 覆盖关键工作流和窄屏导航；Vitest 的显式统计范围为 `src/app/api/**/*.ts`、`src/services/**/*.ts`、`src/lib/**/*.ts` 和 `src/features/**/*.ts`，并排除展示型 TSX、纯类型与入口文件。这样新增但尚未被测试加载的逻辑也会进入统计，页面从 `app/` 迁入 Feature 时不会改变覆盖率口径。v0.19.0 的新口径基线为 Statements 40.67%、Branches 42.58%、Functions 44.79%、Lines 44.98%；该版本只记录基线，不设置未经验证的固定门槛。
 
 AI 任务通过 `src/features/ai-workflow/` 的判别联合与 reducer 表达校验、生成、复核、保存、完成、失败和取消。页面刷新后，仍处于运行阶段的存档必须恢复为可重试的中断状态，不能假装后台任务仍在继续。该状态只记录任务名称、阶段、时间和安全提示，不保存凭据、文件或模型请求正文。
 
