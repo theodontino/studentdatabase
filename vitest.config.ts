@@ -17,8 +17,8 @@ export default defineConfig({
         "src/tests/**",
         "src/generated/**",
         "src/config/**",
-        // Interactive presentation is exercised by Playwright; keep the v0.16
-        // unit baseline stable when page code moves from app/ into features/.
+        // Interactive presentation is exercised by Playwright. Hooks, reducers,
+        // API modules, services and pure TypeScript remain in the Vitest scope.
         "src/features/**/*.tsx",
         "src/components/ui/**/*.tsx",
         "scripts/test-*.ts",

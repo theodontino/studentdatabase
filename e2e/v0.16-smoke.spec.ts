@@ -119,6 +119,7 @@ test.describe.serial("v0.16.0 core browser smoke tests", () => {
 
     await page.getByRole("button", { name: "批量生成" }).click();
     await expect(page.getByText("反馈已生成。", { exact: true })).toBeVisible();
+    await expect(page.getByText("反馈已就绪，请逐条检查和编辑后再导出。", { exact: true })).toBeVisible();
     await expect(page.getByText(`模拟反馈：${TEST_FIXTURE.students[0].name}本节课表现稳定。`, { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "历史", exact: true }).click();
