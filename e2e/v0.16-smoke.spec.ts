@@ -110,7 +110,7 @@ test.describe.serial("v0.16.0 core browser smoke tests", () => {
     });
 
     await page.goto("/feedback");
-    await expect(page.getByRole("heading", { name: "课后反馈工作台" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "课后工作台" })).toBeVisible();
     await page.locator("select").nth(0).selectOption(TEST_FIXTURE.semester.id);
     await page.locator("select").nth(1).selectOption({ label: TEST_FIXTURE.class.name });
     await page.locator("select").nth(2).selectOption(TEST_FIXTURE.sessions[0].code);

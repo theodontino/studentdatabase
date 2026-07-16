@@ -12,8 +12,8 @@ test.describe.serial("v0.17.0 information architecture", () => {
 
   test("legacy routes open their v0.17 workspaces", async ({ page }) => {
     await page.goto("/input");
-    await expect(page).toHaveURL(/\/entry\?step=input/);
-    await expect(page.getByRole("heading", { name: "课堂录入" })).toBeVisible();
+    await expect(page).toHaveURL(/\/feedback\?.*step=extract/);
+    await expect(page.getByRole("heading", { name: "课后工作台" })).toBeVisible();
 
     await page.goto("/settings");
     await expect(page).toHaveURL(/\/system\/configuration/);
@@ -35,18 +35,19 @@ test.describe.serial("v0.17.0 information architecture", () => {
   });
 
   test("teaching context and an unfinished entry survive page switches", async ({ page }) => {
-    await page.goto("/entry?step=input");
+    await page.goto("/feedback");
     await page.getByLabel("学期").selectOption(TEST_FIXTURE.semester.id);
     await page.getByLabel("班级").selectOption({ label: TEST_FIXTURE.class.name });
-    await page.getByLabel("课次").selectOption(TEST_FIXTURE.sessions[0].code);
-    await page.getByPlaceholder("例如：今天张三测验氧化还原全对，但上课走神。李四作业没交，情绪低落。给王五的妈妈打了电话讨论近况。").fill("E2E 未提交课堂回顾");
+    await page.locator("select").nth(2).selectOption(TEST_FIXTURE.sessions[0].code);
+    await page.getByRole("button", { name: "2 录入 录入与提取课堂记录" }).click();
+    await page.getByPlaceholder("写下这节课对反馈有用的事实。未提及学生会按缺勤补齐。").fill("E2E 未提交课堂回顾");
 
     await page.getByRole("link", { name: "班级日报" }).click();
     await expect(page).toHaveURL(new RegExp(`semesterId=${TEST_FIXTURE.semester.id}`));
     await expect(page.getByLabel("班级")).toHaveValue(TEST_FIXTURE.class.name);
     await expect(page.getByLabel("课次")).toHaveValue(TEST_FIXTURE.sessions[0].code);
 
-    await page.getByRole("link", { name: "课堂录入" }).click();
+    await page.getByRole("link", { name: "课后工作台" }).click();
     await expect(page.getByRole("textbox")).toHaveValue("E2E 未提交课堂回顾");
   });
 
@@ -90,12 +91,12 @@ test.describe.serial("v0.17.0 information architecture", () => {
     await page.getByLabel("学期").selectOption(TEST_FIXTURE.semester.id);
     await page.getByLabel("班级").selectOption({ label: TEST_FIXTURE.class.name });
     await page.locator("select").nth(2).selectOption(TEST_FIXTURE.sessions[0].code);
-    await page.getByRole("button", { name: "2 提取 提取课堂记录" }).click();
+    await page.getByRole("button", { name: "2 录入 录入与提取课堂记录" }).click();
     const review = page.getByPlaceholder("写下这节课对反馈有用的事实。未提及学生会按缺勤补齐。");
     await review.fill("E2E 未生成反馈的课堂回顾");
 
     await page.getByRole("link", { name: "工作历史" }).click();
-    await page.getByRole("link", { name: "课后反馈" }).click();
+    await page.getByRole("link", { name: "课后工作台" }).click();
     await expect(page.getByPlaceholder("写下这节课对反馈有用的事实。未提及学生会按缺勤补齐。")).toHaveValue("E2E 未生成反馈的课堂回顾");
     await page.getByRole("button", { name: "1 准备 选择课次与准备材料" }).click();
     await expect(page.locator("select").nth(2)).toHaveValue(TEST_FIXTURE.sessions[0].code);
@@ -115,7 +116,7 @@ test.describe.serial("v0.17.0 information architecture", () => {
   test("feedback workspace does not overflow a narrow window", async ({ page }) => {
     await page.setViewportSize({ width: 720, height: 900 });
     await page.goto("/feedback");
-    await expect(page.getByRole("heading", { name: "课后反馈工作台" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "课后工作台" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
@@ -183,7 +184,7 @@ test.describe.serial("v0.17.0 information architecture", () => {
   test("all remaining core workspaces avoid page-level narrow overflow", async ({ page }) => {
     await page.setViewportSize({ width: 720, height: 900 });
     const paths = [
-      "/", "/quick-score", "/entry?step=input", "/daily-report", "/diarize",
+      "/", "/quick-score", "/feedback?step=extract", "/daily-report", "/diarize",
       `/students/${TEST_FIXTURE.students[0].id}?semesterId=${TEST_FIXTURE.semester.id}`,
       `/semesters/${TEST_FIXTURE.semester.id}`, "/system/integrations",
     ];

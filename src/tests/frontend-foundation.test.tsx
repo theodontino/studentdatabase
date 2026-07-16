@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ConfirmDialog, Dialog, Drawer, FormField, Input, MetricCard, SaveStateIndicator, Skeleton } from "@/components/ui";
 import { entryReducer, INITIAL_ENTRY_STATE } from "@/features/entry/entry-reducer";
-import { ApiError, requestJson } from "@/lib/api-client";
+import { ApiError, downloadFile, requestJson } from "@/lib/api-client";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -36,5 +36,35 @@ describe("frontend foundation", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } })).mockResolvedValueOnce(new Response(JSON.stringify({ error: "固定错误" }), { status: 422, headers: { "Content-Type": "application/json" } })));
     await expect(requestJson<{ ok: boolean }>("/ok")).resolves.toEqual({ ok: true });
     await expect(requestJson("/fail")).rejects.toEqual(expect.objectContaining<ApiError>({ name: "ApiError", status: 422, message: "固定错误" }));
+  });
+
+  it("handles empty success responses and plain-text API failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockResolvedValueOnce(new Response(null, { status: 204 }))
+        .mockResolvedValueOnce(new Response(" 服务暂时不可用 ", { status: 503 })),
+    );
+
+    await expect(requestJson<void>("/empty")).resolves.toBeUndefined();
+    await expect(requestJson("/text-failure")).rejects.toEqual(
+      expect.objectContaining<ApiError>({ name: "ApiError", status: 503, message: "服务暂时不可用" }),
+    );
+  });
+
+  it("downloads successful responses with the requested filename", async () => {
+    const click = vi.fn();
+    const anchor = { href: "", download: "", click };
+    const createObjectURL = vi.fn(() => "blob:download");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("report", { status: 200 })));
+    vi.stubGlobal("document", { createElement: vi.fn(() => anchor) });
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+
+    await downloadFile("/report", "课堂报告.xlsx");
+
+    expect(anchor).toMatchObject({ href: "blob:download", download: "课堂报告.xlsx" });
+    expect(click).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:download");
   });
 });
