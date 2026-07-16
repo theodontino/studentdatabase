@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui";
+import { Badge, GlowSurface } from "@/components/ui";
 import type { AiWorkflowPhase, AiWorkflowState } from "./workflow-machine";
 
 const DEFAULT_STEPS: Array<{ phase: AiWorkflowPhase; label: string }> = [
@@ -24,9 +24,11 @@ export function AiWorkflowStatus({ state, steps = DEFAULT_STEPS }: {
   steps?: Array<{ phase: AiWorkflowPhase; label: string }>;
 }) {
   if (state.phase === "idle") return null;
+  const running = state.phase === "validating" || state.phase === "generating" || state.phase === "saving";
   const activeOrder = state.phase === "failed" ? ORDER[state.retryPhase] : ORDER[state.phase];
   const tone = state.phase === "failed" ? "danger" : state.phase === "completed" ? "success" : state.phase === "cancelled" ? "warning" : "info";
   return (
+    <GlowSurface tone={state.phase === "failed" ? "danger" : "active"} active={running} breathe={running} className="ai-workflow-glow">
     <section className={`ai-workflow-status is-${state.phase}`} aria-live="polite">
       <div className="ai-workflow-status__copy">
         <Badge tone={tone}>{state.phase === "failed" ? "需要处理" : state.phase === "completed" ? "已完成" : state.phase === "cancelled" ? "已取消" : "进行中"}</Badge>
@@ -42,5 +44,6 @@ export function AiWorkflowStatus({ state, steps = DEFAULT_STEPS }: {
       {state.phase === "generating" && state.progress !== null && <div className="ai-workflow-status__progress" aria-label={`完成 ${Math.round(state.progress * 100)}%`}><span style={{ width: `${state.progress * 100}%` }} /></div>}
       {state.phase === "failed" && <p className="ai-workflow-status__error">{state.error}</p>}
     </section>
+    </GlowSurface>
   );
 }

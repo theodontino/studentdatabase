@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTeachingContext } from "@/features/teaching-context";
 import { requestJson } from "@/lib/api-client";
-import { filterStudents, groupStudentsByClass } from "./student-list-utils";
+import { filterStudents, groupStudentsByClass, sortStudents, type StudentSort } from "./student-list-utils";
 import type {
   StudentFormState,
   StudentImportResult,
@@ -42,6 +42,11 @@ export function useStudentsWorkspace() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [previewPhase, setPreviewPhase] = useState<"idle" | "entering" | "visible" | "exiting">("idle");
+  const [sort, setSort] = useState<StudentSort>("score-desc");
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeGraceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const animationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchStudents = useCallback(async () => {
     setLoading(true);
@@ -65,8 +70,8 @@ export function useStudentsWorkspace() {
   }, [fetchStudents, hydrated]);
 
   const filteredStudents = useMemo(
-    () => filterStudents(students, search),
-    [search, students],
+    () => sortStudents(filterStudents(students, search), sort),
+    [search, sort, students],
   );
   const classGroups = useMemo(
     () => groupStudentsByClass(filteredStudents),
@@ -76,6 +81,78 @@ export function useStudentsWorkspace() {
     () => students.find((student) => student.id === selectedStudentId) ?? null,
     [selectedStudentId, students],
   );
+
+  useEffect(() => () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    if (closeGraceTimer.current) clearTimeout(closeGraceTimer.current);
+    if (animationTimer.current) clearTimeout(animationTimer.current);
+  }, []);
+
+  function clearPreviewTimers() {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    if (closeGraceTimer.current) clearTimeout(closeGraceTimer.current);
+    if (animationTimer.current) clearTimeout(animationTimer.current);
+    hoverTimer.current = null;
+    closeGraceTimer.current = null;
+    animationTimer.current = null;
+  }
+
+  function showStudentPreview(studentId: string) {
+    if (closeGraceTimer.current) clearTimeout(closeGraceTimer.current);
+    if (animationTimer.current) clearTimeout(animationTimer.current);
+    closeGraceTimer.current = null;
+    animationTimer.current = null;
+    setSelectedStudentId(studentId);
+    setPreviewPhase("entering");
+    animationTimer.current = setTimeout(() => {
+      setPreviewPhase("visible");
+      animationTimer.current = null;
+    }, 220);
+  }
+
+  function beginStudentPreview(studentId: string) {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    if (closeGraceTimer.current) clearTimeout(closeGraceTimer.current);
+    closeGraceTimer.current = null;
+    if (selectedStudentId === studentId && previewPhase !== "exiting") return;
+    hoverTimer.current = setTimeout(() => {
+      showStudentPreview(studentId);
+      hoverTimer.current = null;
+    }, 360);
+  }
+
+  function keepStudentPreview() {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    if (closeGraceTimer.current) clearTimeout(closeGraceTimer.current);
+    hoverTimer.current = null;
+    closeGraceTimer.current = null;
+    if (selectedStudentId && previewPhase === "exiting") showStudentPreview(selectedStudentId);
+  }
+
+  function closeStudentPreview() {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    if (closeGraceTimer.current) clearTimeout(closeGraceTimer.current);
+    hoverTimer.current = null;
+    closeGraceTimer.current = null;
+    if (!selectedStudentId) return;
+    if (animationTimer.current) clearTimeout(animationTimer.current);
+    setPreviewPhase("exiting");
+    animationTimer.current = setTimeout(() => {
+      setSelectedStudentId("");
+      setPreviewPhase("idle");
+      animationTimer.current = null;
+    }, 180);
+  }
+
+  function endStudentPreview() {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+    if (closeGraceTimer.current) clearTimeout(closeGraceTimer.current);
+    closeGraceTimer.current = setTimeout(() => {
+      closeGraceTimer.current = null;
+      closeStudentPreview();
+    }, 140);
+  }
 
   function toggleClass(className: string) {
     setCollapsedClasses((current) => {
@@ -152,7 +229,11 @@ export function useStudentsWorkspace() {
     setDeleteError("");
     try {
       await requestJson<{ success: true }>(`/api/students/${deleteTarget.id}`, { method: "DELETE" });
-      if (selectedStudentId === deleteTarget.id) setSelectedStudentId("");
+      if (selectedStudentId === deleteTarget.id) {
+        clearPreviewTimers();
+        setSelectedStudentId("");
+        setPreviewPhase("idle");
+      }
       setDeleteTarget(null);
       await fetchStudents();
     } catch (reason) {
@@ -232,9 +313,16 @@ export function useStudentsWorkspace() {
     openStudent,
     removeLabel,
     search,
+    sort,
+    setSort,
     selectedStudent,
+    previewPhase,
     selectedSemesterId,
-    selectStudent: setSelectedStudentId,
+    beginStudentPreview,
+    showStudentPreview,
+    keepStudentPreview,
+    endStudentPreview,
+    closeStudentPreview,
     setDeleteError,
     setDeleteTarget,
     setForm,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Input, PageHeader } from "@/components/ui";
+import { Button, Input, PageHeader, Select } from "@/components/ui";
 import { SemesterContextSelector } from "@/features/teaching-context";
 import type { useStudentsWorkspace } from "./useStudentsWorkspace";
 
@@ -23,6 +23,14 @@ export function StudentListToolbar({ workspace }: { workspace: Workspace }) {
           placeholder="按姓名、学号、标签或班级搜索..."
           aria-label="搜索学生"
         />
+        <label className="student-list-sort">
+          <span>班级内排序</span>
+          <Select value={workspace.sort} onChange={(event) => workspace.setSort(event.target.value as typeof workspace.sort)} aria-label="学生排序方式">
+            <option value="score-desc">综合分：高到低</option>
+            <option value="score-asc">综合分：低到高</option>
+            <option value="name">姓名顺序</option>
+          </Select>
+        </label>
         {workspace.search && <p>{workspace.filteredStudents.length} / {workspace.students.length} 名学生匹配</p>}
       </div>
     </>

@@ -22,7 +22,17 @@ export function StudentClassGroups({ workspace }: { workspace: Workspace }) {
       </button>
       {!collapsed && <div className="student-list-rows">{students.map((student) => (
         <article key={student.id} className={`student-list-row${workspace.selectedStudent?.id === student.id ? " is-selected" : ""}`}>
-          <button type="button" className="student-list-row__open" onClick={() => workspace.selectStudent(student.id)} aria-label={`预览${student.name}的学生档案`} aria-pressed={workspace.selectedStudent?.id === student.id}>
+          <button
+            type="button"
+            className="student-list-row__open"
+            onPointerEnter={(event) => { if (event.pointerType === "mouse") workspace.beginStudentPreview(student.id); }}
+            onPointerLeave={(event) => { if (event.pointerType === "mouse") workspace.endStudentPreview(); }}
+            onFocus={() => workspace.showStudentPreview(student.id)}
+            onBlur={workspace.endStudentPreview}
+            onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); workspace.closeStudentPreview(); } }}
+            onClick={() => workspace.openStudent(student.id)}
+            aria-label={`打开${student.name}的学生档案`}
+          >
             <span className={`student-list-row__avatar ${student.gender === "男" ? "is-male" : "is-female"}`} aria-hidden="true">{student.name[0]}</span>
             <span className="student-list-row__identity">
               <span><strong>{student.name}</strong><small>{student.studentId}</small></span>

@@ -1,6 +1,8 @@
 import type { StudentSemesterSummary } from "@/services/student-semester-summary-service";
 import type { StudentListItem } from "./types";
 
+export type StudentSort = "score-desc" | "score-asc" | "name";
+
 export function filterStudents(students: StudentListItem[], search: string) {
   const query = search.trim().toLowerCase();
   if (!query) return students;
@@ -20,6 +22,23 @@ export function groupStudentsByClass(students: StudentListItem[]) {
     groups.set(student.class, group);
   }
   return groups;
+}
+
+export function sortStudents(students: StudentListItem[], sort: StudentSort) {
+  const collator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
+  return [...students].sort((left, right) => {
+    if (sort === "name") {
+      return collator.compare(left.name, right.name) || left.id.localeCompare(right.id);
+    }
+    const leftScore = left.semesterSummary?.score100 ?? null;
+    const rightScore = right.semesterSummary?.score100 ?? null;
+    if (leftScore === null && rightScore !== null) return 1;
+    if (leftScore !== null && rightScore === null) return -1;
+    if (leftScore !== null && rightScore !== null && leftScore !== rightScore) {
+      return sort === "score-desc" ? rightScore - leftScore : leftScore - rightScore;
+    }
+    return collator.compare(left.name, right.name) || left.id.localeCompare(right.id);
+  });
 }
 
 export function studentSummaryHint(summary: StudentSemesterSummary | null | undefined) {

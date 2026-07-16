@@ -1,4 +1,4 @@
-import { Button, StatusBanner } from "@/components/ui";
+import { Button, GlowSurface, StatusBanner } from "@/components/ui";
 import {
   DIARIZE_ENGINES,
   type DiarizeEngine,
@@ -40,7 +40,9 @@ export function DiarizeTaskComposer({
   onStartTask: () => void;
   onRetryTask: (taskId: string) => void;
 }) {
+  const running = busy || recordingState === "recording";
   return (
+    <GlowSurface tone="active" active={running} breathe={running} className="diarize-composer-glow">
     <section className="bg-white border border-gray-200 rounded-lg p-6 space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <label className="block min-w-0">
@@ -98,5 +100,6 @@ export function DiarizeTaskComposer({
       {status && <StatusBanner tone="success">{status}</StatusBanner>}
       {error && <StatusBanner tone="danger">{error}</StatusBanner>}
     </section>
+    </GlowSurface>
   );
 }

@@ -1,4 +1,6 @@
 export { cx } from "./class-names";
+export { GlowSurface } from "./GlowSurface";
+export type { GlowSurfaceProps, GlowTone } from "./GlowSurface";
 export { Button, FormField, IconButton, Input, Select, Textarea } from "./controls";
 export { ActionBar, Card, FilterBar, MetricCard, PageHeader, Section, SegmentedControl, Tabs, Toolbar } from "./layout";
 export { ConfirmDialog, Dialog, Drawer } from "./overlays";
