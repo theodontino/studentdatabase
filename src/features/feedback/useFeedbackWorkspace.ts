@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FeedbackContextStudent } from "@/components/wecom/types";
+import type { InputHistoryState } from "@/features/entry";
 import { teachingContextWorkspaceKey, useTeachingContext } from "@/features/teaching-context";
 import { useAiWorkflow } from "@/features/ai-workflow";
 import { requestJson } from "@/lib/api-client";
@@ -10,15 +11,17 @@ import { readSSEStream } from "@/lib/sse";
 import type { DraftReviewResult, DraftStructuredResult, NameCorrection } from "@/lib/types";
 import { useSessionWorkspace } from "@/lib/use-session-workspace";
 import type { FeedbackCard, FeedbackContextResponse, FeedbackHistoryState, FeedbackStep, FeedbackStudentOption, FeedbackWorkspaceState, SingleFeedbackHistoryState } from "./types";
+import { isInputHistoryState } from "./history-adapters";
 import { isFeedbackWorkspace, todayLocalDate } from "./workspace-state";
 
 function errorMessage(error: unknown, fallback: string) { return error instanceof Error ? error.message : fallback; }
 
-export function useFeedbackWorkspace() {
+export function useFeedbackWorkspace(initialStep?: FeedbackStep) {
   const { context, hydrated: contextHydrated, setContext, setSemesterId, setClassName, setSessionCode } = useTeachingContext();
   const { semesterId, className, sessionCode } = context;
   const [sessionRefreshKey, setSessionRefreshKey] = useState(0);
-  const [activeStep, setActiveStep] = useState<FeedbackStep>("prepare");
+  const requestedStep = useRef<FeedbackStep | undefined>(initialStep);
+  const [activeStep, setActiveStep] = useState<FeedbackStep>(initialStep ?? "prepare");
   const [newSessionDate, setNewSessionDate] = useState(todayLocalDate);
   const [creatingSession, setCreatingSession] = useState(false);
   const [rawText, setRawText] = useState("");
@@ -51,6 +54,7 @@ export function useFeedbackWorkspace() {
   const [singleDays, setSingleDays] = useState(14);
   const [singleFeedback, setSingleFeedback] = useState("");
   const [singleLoading, setSingleLoading] = useState(false);
+  const [legacyDraftAvailable, setLegacyDraftAvailable] = useState(false);
   const workflow = useAiWorkflow();
 
   const workspaceValue = useMemo<FeedbackWorkspaceState>(() => ({
@@ -63,7 +67,9 @@ export function useFeedbackWorkspace() {
     key: teachingContextWorkspaceKey("feedback", context), value: workspaceValue,
     validate: isFeedbackWorkspace, enabled: contextHydrated,
     restore: (saved) => {
-      setActiveStep(saved?.activeStep ?? (saved?.feedbackCards.length ? "export" : saved?.confirmed ? "generate" : saved?.parsedResult ? "review" : saved?.rawText ? "extract" : "prepare"));
+      const restoredStep = requestedStep.current ?? saved?.activeStep ?? (saved?.feedbackCards.length ? "export" : saved?.confirmed ? "generate" : saved?.parsedResult ? "review" : saved?.rawText ? "extract" : "prepare");
+      requestedStep.current = undefined;
+      setActiveStep(restoredStep);
       setNewSessionDate(saved?.newSessionDate ?? todayLocalDate());
       setRawText(saved?.rawText ?? ""); setParseStatus(saved?.parseStatus ?? ""); setStreamContent(saved?.streamContent ?? "");
       setDraftId(saved?.draftId ?? ""); setParsedResult(saved?.parsedResult ?? null); setReviewResult(saved?.reviewResult ?? null);
@@ -81,9 +87,22 @@ export function useFeedbackWorkspace() {
   useEffect(() => {
     if (!workspace.hydrated) return;
     const draft = sessionStorage.getItem("chem-track:feedback-draft");
-    if (!draft) return;
-    setRawText(draft); setParseStatus("已从录音转写载入课后回顾。"); sessionStorage.removeItem("chem-track:feedback-draft");
+    const legacyDraft = sessionStorage.getItem("chem-track:nl-input-draft");
+    if (draft) {
+      setRawText(draft); setParseStatus("已从录音转写载入课后回顾。"); sessionStorage.removeItem("chem-track:feedback-draft");
+      setLegacyDraftAvailable(Boolean(legacyDraft));
+    } else if (legacyDraft) {
+      setRawText(legacyDraft); setParseStatus("已载入旧课堂录入草稿。"); sessionStorage.removeItem("chem-track:nl-input-draft");
+      setActiveStep("extract");
+    }
   }, [workspace.hydrated]);
+  useEffect(() => {
+    if (!workspace.hydrated) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("step") === activeStep) return;
+    url.searchParams.set("step", activeStep);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [activeStep, workspace.hydrated]);
   useEffect(() => {
     if (!sessionCode) { setContextStudents([]); setContextError(""); return; }
     let cancelled = false;
@@ -202,11 +221,26 @@ export function useFeedbackWorkspace() {
     catch (reason) { const message = errorMessage(reason, "导出失败"); setError(message); workflow.fail(message, "saving"); }
     finally { setExporting(false); }
   }
-  function restoreHistory(state: FeedbackHistoryState) {
+  function restoreHistory(state: FeedbackHistoryState | InputHistoryState) {
+    if (isInputHistoryState(state)) {
+      setContext({ semesterId: state.semesterId, className: state.className, sessionCode: state.sessionCode });
+      setRawText(state.rawText); setDraftId(state.result.draftId); setParsedResult(state.result.parsedResult);
+      setReviewResult(state.result.reviewResult); setCorrections(state.result.corrections || []); setConfirmed(false);
+      setActiveStep("review"); setError(""); setStatus("已恢复旧课堂录入历史，请核对后确认写入。");
+      workflow.start("恢复课堂录入草案", "正在准备旧课堂录入草案…");
+      workflow.transition("reviewing", "旧课堂录入草案已恢复，请人工核对。");
+      return;
+    }
     if (state.kind === "single") { setContext({ semesterId: state.semesterId, className: state.className, sessionCode: state.sessionCode }); setSingleStudentId(state.studentId); setSingleDays(state.days); setSingleFeedback(state.feedback); setError(""); setStatus("已恢复单人反馈历史。"); return; }
     setContext({ semesterId: state.semesterId, className: state.className, sessionCode: state.sessionCode }); setFeedbackCards(state.students); setFeedbackTotal(state.total); setFeedbackDone(state.total); setFeedbackDirty(false); setForceRegenerate(false); setActiveStep("export"); setContextReloadKey((current) => current + 1); setError(""); setStatus("已恢复历史反馈结果。");
   }
-  function markContextChanged() { setFeedbackCards([]); setFeedbackDone(0); setFeedbackTotal(0); setFeedbackDirty(false); setForceRegenerate(true); setContextReloadKey((current) => current + 1); setStatus("家校沟通已导入，反馈上下文已刷新。"); }
+  function restoreLegacyDraft() {
+    const legacyDraft = sessionStorage.getItem("chem-track:nl-input-draft");
+    if (!legacyDraft) { setLegacyDraftAvailable(false); return; }
+    if (rawText.trim()) sessionStorage.setItem("chem-track:feedback-draft", rawText);
+    setRawText(legacyDraft); sessionStorage.removeItem("chem-track:nl-input-draft"); setLegacyDraftAvailable(false);
+    setParseStatus("已载入旧课堂录入草稿；原工作台内容已保留为反馈草稿。"); setActiveStep("extract");
+  }
   async function generateSingleFeedback() {
     if (!singleStudentId) return; setSingleLoading(true); setError("");
     try {
@@ -223,8 +257,9 @@ export function useFeedbackWorkspace() {
     parsing, assistantImporting, parseStatus, streamContent, draftId, parsedResult, reviewResult, corrections, confirming, confirmed,
     generating, regeneratingId, exporting, error, status, feedbackCards, feedbackTotal, feedbackDone, contextStudents, contextLoading,
     contextError, feedbackDirty, students, singleStudentId, setSingleStudentId, singleDays, setSingleDays, singleFeedback, setSingleFeedback,
+    legacyDraftAvailable, restoreLegacyDraft,
     singleLoading, contextByStudent, workflow: workflow.state, canParse: Boolean(rawText.trim() && sessionCode && !parsing), canConfirm: Boolean(draftId && parsedResult && !confirming), canGenerate: Boolean(sessionCode && !generating),
     onSemesterChange, onClassChange, onSessionChange, createSession, setParsedAttendance, parse, importAssistantRoster, confirm, generate,
-    regenerateOne, updateFeedback, exportFeedback, restoreHistory, markContextChanged, generateSingleFeedback,
+    regenerateOne, updateFeedback, exportFeedback, restoreHistory, generateSingleFeedback,
   };
 }

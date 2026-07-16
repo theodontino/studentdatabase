@@ -6,12 +6,11 @@ import {
   type DiarizeTask,
 } from "./diarize-types";
 
-export function DiarizeTaskDetail({ task, onCopy, onDownload, onSendToFeedback, onSendToInput }: {
+export function DiarizeTaskDetail({ task, onCopy, onDownload, onSendToFeedback }: {
   task: DiarizeTask;
   onCopy: () => void;
   onDownload: () => void;
   onSendToFeedback: () => void;
-  onSendToInput: () => void;
 }) {
   return (
     <section className="min-w-0 bg-white border border-gray-200 rounded-lg p-6">
@@ -25,8 +24,7 @@ export function DiarizeTaskDetail({ task, onCopy, onDownload, onSendToFeedback, 
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={onCopy}>复制文字稿</Button>
             <Button variant="secondary" onClick={onDownload}>下载 TXT</Button>
-            <Button variant="secondary" onClick={onSendToFeedback}>送入课后反馈</Button>
-            <Button onClick={onSendToInput}>送入 NL 录入</Button>
+            <Button onClick={onSendToFeedback}>送入课后工作台</Button>
           </div>
           <Textarea readOnly value={task.resultText} className="h-80 font-mono bg-gray-50" aria-label="转写文字稿" />
         </div>

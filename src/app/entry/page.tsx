@@ -1,2 +1,6 @@
-import { EntryWorkspace } from "@/features/entry";
-export default function EntryPage() { return <EntryWorkspace />; }
+import { redirect } from "next/navigation";
+
+export default async function LegacyEntryPage({ searchParams }: { searchParams: Promise<{ step?: string }> }) {
+  const { step } = await searchParams;
+  redirect(step === "review" ? "/history?view=drafts" : "/feedback?step=extract");
+}

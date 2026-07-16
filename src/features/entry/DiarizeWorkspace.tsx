@@ -172,15 +172,15 @@ export default function DiarizeWorkspace() {
     URL.revokeObjectURL(url);
   }
 
-  function sendResult(storageKey: "chem-track:nl-input-draft" | "chem-track:feedback-draft", path: string) {
+  function sendResult() {
     if (!activeTask?.resultText) return;
-    sessionStorage.setItem(storageKey, activeTask.resultText);
-    router.push(path);
+    sessionStorage.setItem("chem-track:feedback-draft", activeTask.resultText);
+    router.push("/feedback?step=extract");
   }
 
   return (
     <main className="diarize-workspace">
-      <PageHeader title="录音转写" description="把课后回顾录音转成文字稿，再送入课堂录入或课后反馈。" />
+      <PageHeader title="录音转写" description="把课后回顾录音转成文字稿，再送入课后工作台。" />
       <p className="diarize-workspace__note">转写方式和任务编号会在切换页面后恢复；浏览器不会保存未提交的音频文件，离开前会提醒。</p>
       <div className="diarize-workspace__layout">
         <DiarizeTaskList tasks={tasks} busy={busy} onRefresh={() => void refreshTasks()} onOpen={(taskId) => void openTask(taskId)} onRetry={(taskId) => void retryTask(taskId)} onDelete={(taskId) => void removeTask(taskId)} />
@@ -202,7 +202,7 @@ export default function DiarizeWorkspace() {
             onStartTask={() => void startTask()}
             onRetryTask={(taskId) => void retryTask(taskId)}
           />
-          {activeTask && <DiarizeTaskDetail task={activeTask} onCopy={() => void copyResult()} onDownload={downloadResult} onSendToFeedback={() => sendResult("chem-track:feedback-draft", "/feedback")} onSendToInput={() => sendResult("chem-track:nl-input-draft", "/input")} />}
+          {activeTask && <DiarizeTaskDetail task={activeTask} onCopy={() => void copyResult()} onDownload={downloadResult} onSendToFeedback={sendResult} />}
           <DiarizeRunLog logs={logs} />
         </div>
       </div>

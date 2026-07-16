@@ -1,27 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type {
-  LocalToolAvailability,
-  LocalToolsStatusResponse,
-} from "@/lib/local-tool-status";
+import { Badge, Button, ErrorState, LoadingState, Section, StatusBanner } from "@/components/ui";
+import type { LocalToolAvailability, LocalToolsStatusResponse } from "@/lib/local-tool-status";
 
 const STATUS_LABEL: Record<LocalToolAvailability, string> = {
   available: "可用",
-  warning: "警告",
+  warning: "需注意",
   unavailable: "不可用",
 };
 
-const STATUS_STYLE: Record<LocalToolAvailability, string> = {
-  available: "border-green-200 bg-green-50 text-green-700",
-  warning: "border-amber-200 bg-amber-50 text-amber-700",
-  unavailable: "border-red-200 bg-red-50 text-red-700",
+const STATUS_TONE: Record<LocalToolAvailability, "info" | "warning" | "danger"> = {
+  available: "info",
+  warning: "warning",
+  unavailable: "danger",
 };
 
 export default function LocalToolStatusPanel() {
   const [data, setData] = useState<LocalToolsStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,75 +36,49 @@ export default function LocalToolStatusPanel() {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
+
+  function toggle(toolId: string) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(toolId)) next.delete(toolId);
+      else next.add(toolId);
+      return next;
+    });
+  }
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-white p-5" aria-labelledby="local-tools-title">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 id="local-tools-title" className="font-semibold text-gray-800">本地工具状态</h3>
-          <p className="mt-1 text-sm text-gray-500">只读检查路径和文件，不会安装依赖、启动同步或读取聊天内容。</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-        >
-          {loading ? "检查中..." : "重新检查"}
-        </button>
+    <Section
+      className="local-tools-panel"
+      title="本地工具状态"
+      description="只读检查路径和文件，不会安装依赖、启动同步或读取聊天内容。"
+      actions={<Button variant="secondary" onClick={() => void load()} disabled={loading}>{loading ? "检查中…" : "重新检查"}</Button>}
+    >
+      <div className="local-tools-panel__body">
+        <StatusBanner tone="warning">音频转写使用 auto 模式时会依次尝试通义听悟、本地 FunASR 和阿里云 ASR，音频可能上传到云端。</StatusBanner>
+        {error && <ErrorState message={error} action={<Button onClick={() => void load()}>重试</Button>} />}
+        {loading && !data ? <LoadingState label="正在检查本地工具…" /> : <div className="local-tool-grid" aria-live="polite">
+          {data?.tools.map((tool) => {
+            const open = expanded.has(tool.id);
+            return <article key={tool.id} className={`local-tool-card is-${tool.status}`}>
+              <header>
+                <div className="local-tool-card__identity"><span aria-hidden="true">{tool.id === "funasr" ? "ASR" : "WC"}</span><div><h3>{tool.name}</h3><p>{tool.summary}</p></div></div>
+                <Badge tone={STATUS_TONE[tool.status]}>{STATUS_LABEL[tool.status]}</Badge>
+              </header>
+              {tool.notice && <p className="local-tool-card__notice">{tool.notice}</p>}
+              <Button variant="ghost" uiSize="sm" className="local-tool-card__toggle" aria-expanded={open} aria-controls={`local-tool-checks-${tool.id}`} onClick={() => toggle(tool.id)}>{open ? "收起检查详情" : `查看 ${tool.checks.length} 项检查详情`}</Button>
+              {open && <div id={`local-tool-checks-${tool.id}`} className="local-tool-checks">
+                {tool.checks.map((item) => <div key={item.id} className="local-tool-check">
+                  <div><strong>{item.label}</strong><Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge></div>
+                  <p>{item.detail}</p>
+                  {item.path && <code>{item.path}</code>}
+                </div>)}
+              </div>}
+            </article>;
+          })}
+        </div>}
+        {data && <p className="local-tools-panel__checked-at">上次检查：{new Date(data.checkedAt).toLocaleString("zh-CN")}</p>}
       </div>
-
-      <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-        音频转写使用 auto 模式时会依次尝试通义听悟、本地 FunASR 和阿里云 ASR，音频可能上传到云端。
-      </div>
-
-      {error && (
-        <div className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
-          {error}
-        </div>
-      )}
-
-      {loading && !data ? (
-        <p className="mt-4 text-sm text-gray-500" aria-live="polite">正在检查本地工具...</p>
-      ) : (
-        <div className="mt-4 space-y-4" aria-live="polite">
-          {data?.tools.map((tool) => (
-            <div key={tool.id} className="rounded-md border border-gray-200 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <h4 className="font-medium text-gray-800">{tool.name}</h4>
-                <span className={`rounded border px-2 py-0.5 text-xs ${STATUS_STYLE[tool.status]}`}>
-                  {STATUS_LABEL[tool.status]}
-                </span>
-                <span className="text-xs text-gray-500">{tool.summary}</span>
-              </div>
-              {tool.notice && <p className="mt-2 text-xs text-amber-700">{tool.notice}</p>}
-              <div className="mt-3 divide-y divide-gray-100">
-                {tool.checks.map((item) => (
-                  <div key={item.id} className="grid gap-1 py-2 text-sm md:grid-cols-[150px_90px_1fr]">
-                    <span className="font-medium text-gray-700">{item.label}</span>
-                    <span className={item.status === "available" ? "text-green-700" : item.status === "warning" ? "text-amber-700" : "text-red-700"}>
-                      {STATUS_LABEL[item.status]}
-                    </span>
-                    <div className="min-w-0 text-gray-500">
-                      <div>{item.detail}</div>
-                      {item.path && <div className="mt-0.5 break-all font-mono text-xs text-gray-400">{item.path}</div>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {data && (
-        <p className="mt-3 text-xs text-gray-400">
-          上次检查：{new Date(data.checkedAt).toLocaleString()}
-        </p>
-      )}
-    </section>
+    </Section>
   );
 }

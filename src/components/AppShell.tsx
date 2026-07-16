@@ -17,9 +17,8 @@ type NavigationItem = {
 const groups: Array<{ label: string; items: NavigationItem[] }> = [
   { label: "概览", items: [{ href: "/", label: "仪表盘", icon: "dashboard", context: "semester" }] },
   { label: "教学工作", items: [
-    { href: "/feedback", label: "课后反馈", icon: "feedback", context: "full" },
+    { href: "/feedback", label: "课后工作台", icon: "feedback", context: "full" },
     { href: "/quick-score", label: "手动评分", icon: "score", context: "full" },
-    { href: "/entry", label: "课堂录入", icon: "entry", context: "full" },
     { href: "/diarize", label: "录音转写", icon: "audio" },
   ] },
   { label: "学生与课程", items: [
