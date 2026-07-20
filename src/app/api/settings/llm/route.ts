@@ -6,6 +6,7 @@ import {
   getEffectiveLLMSettings,
   getLLMSettingsStore,
   saveLLMProfile,
+  saveLLMRoleAssignments,
   validateLLMSettings,
 } from "@/lib/llm-settings";
 
@@ -29,10 +30,12 @@ export async function PUT(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const store = activateLLMProfile(body.activeProfileId);
+    const store = body.roleAssignments
+      ? saveLLMRoleAssignments(body.roleAssignments)
+      : activateLLMProfile(body.activeProfileId);
     return NextResponse.json({ ...store, effectiveSettings: getEffectiveLLMSettings() });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "切换 LLM 配置失败" }, { status: 400 });
+    return NextResponse.json({ error: error.message || "更新 LLM 配置失败" }, { status: 400 });
   }
 }
 

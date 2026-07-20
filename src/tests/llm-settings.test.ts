@@ -5,9 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   activateLLMProfile,
   clearLLMSettings,
+  deleteLLMProfile,
   getEffectiveLLMSettings,
   getLLMSettingsStore,
   saveLLMProfile,
+  saveLLMRoleAssignments,
   validateLLMSettings,
 } from "@/lib/llm-settings";
 
@@ -92,6 +94,38 @@ describe("llm-settings", () => {
       apiKey: "cloud-key",
       model: "cloud-model",
     });
+  });
+
+  it("assigns separate feedback and WeCom extraction profiles with active fallback", () => {
+    const draftStore = saveLLMProfile({
+      name: "Draft",
+      apiBaseUrl: "http://localhost:1234/v1",
+      apiKey: "draft-key",
+      model: "draft-model",
+    });
+    const reviewStore = saveLLMProfile({
+      name: "Review",
+      apiBaseUrl: "https://review.example/v1",
+      apiKey: "review-key",
+      model: "review-model",
+    }, false);
+    const draft = draftStore.profiles.find((profile) => profile.name === "Draft")!;
+    const review = reviewStore.profiles.find((profile) => profile.name === "Review")!;
+
+    saveLLMRoleAssignments({
+      feedbackDraftProfileId: draft.id,
+      feedbackReviewProfileId: review.id,
+      wecomExtractionProfileId: review.id,
+    });
+
+    expect(getEffectiveLLMSettings("feedbackDraft").model).toBe("draft-model");
+    expect(getEffectiveLLMSettings("feedbackReview").model).toBe("review-model");
+    expect(getEffectiveLLMSettings("wecomExtraction").model).toBe("review-model");
+
+    const afterDelete = deleteLLMProfile(review.id);
+    expect(afterDelete.roleAssignments.feedbackReviewProfileId).toBeNull();
+    expect(afterDelete.roleAssignments.wecomExtractionProfileId).toBeNull();
+    expect(getEffectiveLLMSettings("feedbackReview").model).toBe("draft-model");
   });
 
   it("rejects incomplete or invalid settings", () => {

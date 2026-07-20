@@ -2,26 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createLLMClient, getLLMModel } from "@/lib/llm";
 import { buildFeedbackContext } from "@/services/feedback-context-service";
+import { generateReviewedFeedback } from "@/services/feedback-generation-service";
+import {
+  markCurrentLLMCacheOperationIncomplete,
+  withLLMCacheOperation,
+} from "@/services/llm-cache-service";
 
-const FEEDBACK_MAX_TOKENS = 2048;
-const FEEDBACK_MAX_ATTEMPTS = 2;
-
-async function completeFeedback(prompt: string, maxTokens = FEEDBACK_MAX_TOKENS) {
-  const client = createLLMClient();
-  const model = getLLMModel();
-
-  for (let attempt = 1; attempt <= FEEDBACK_MAX_ATTEMPTS; attempt += 1) {
-    const resp = await client.chat.completions.create({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.5,
-      max_tokens: maxTokens,
-    });
-    const content = resp.choices[0]?.message?.content?.trim();
-    if (content) return content;
-  }
-
-  throw new Error("LLM 返回空反馈内容，请重试");
+async function reviewedFeedback(
+  studentName: string,
+  promptContext: string,
+  lengthRequirement: string,
+  forbiddenStudentNames: string[] = [],
+) {
+  return generateReviewedFeedback({
+    studentName,
+    promptContext,
+    forbiddenStudentNames,
+    lengthRequirement,
+    draftClient: createLLMClient("feedbackDraft"),
+    draftModel: getLLMModel("feedbackDraft"),
+    reviewClient: createLLMClient("feedbackReview"),
+    reviewModel: getLLMModel("feedbackReview"),
+  });
 }
 
 // POST /api/report/feedback - 按课次或时间段生成家校反馈
@@ -36,13 +38,20 @@ export async function POST(request: NextRequest) {
         const studentContext = feedbackContext.students.find((student) => student.id === studentId);
         if (!studentContext) return NextResponse.json({ error: "该学生不属于当前课次班级" }, { status: 404 });
 
-        const prompt = `你是高中班主任助手。请为以下学生生成一段50-80字的家长反馈文本。语气温和、客观、鼓励为主，适合直接发送。
-
-${studentContext.promptContext}
-
-请只反馈该生本人表现，不比较、不提其他学生姓名。直接返回反馈文本，不要附带标题或说明。`;
-
-        return NextResponse.json({ feedback: await completeFeedback(prompt) });
+        return NextResponse.json(await withLLMCacheOperation(
+          "feedback",
+          "生成单人课次反馈",
+          async () => {
+            const result = await reviewedFeedback(
+              studentContext.name,
+              studentContext.promptContext,
+              "50-80字",
+              feedbackContext.students.filter((student) => student.id !== studentId).map((student) => student.name),
+            );
+            if (result.reviewStatus === "needs_review") markCurrentLLMCacheOperationIncomplete();
+            return result;
+          },
+        ));
       } catch (error) {
         const message = error instanceof Error ? error.message : "读取反馈上下文失败";
         const status = message.includes("不存在") || message.includes("未关联") || message.includes("无学生") ? 400 : 500;
@@ -78,13 +87,15 @@ ${studentContext.promptContext}
 - 关键事件: ${events.map((event) => event.description).join("；") || "无"}
 - 家校沟通: ${comms.map((communication) => `${communication.session?.date ?? "-"}与${communication.target}:${communication.summary}`).join("；") || "无"}`;
 
-    const prompt = `你是高中班主任助手。请为以下学生生成一段100-150字的家长反馈文本。语气温和、客观、鼓励为主，适合直接发送。
-
-${context}
-
-请直接返回反馈文本，不要附带标题或说明。`;
-
-    return NextResponse.json({ feedback: await completeFeedback(prompt) });
+    return NextResponse.json(await withLLMCacheOperation(
+      "feedback",
+      "生成单人近期反馈",
+      async () => {
+        const result = await reviewedFeedback(student.name, context, "100-150字");
+        if (result.reviewStatus === "needs_review") markCurrentLLMCacheOperationIncomplete();
+        return result;
+      },
+    ));
   } catch (error) {
     console.error("[/api/report/feedback] error:", error);
     return NextResponse.json({ error: "生成反馈失败" }, { status: 500 });

@@ -50,6 +50,26 @@ describe("/api/report/feedback-batch", () => {
       data: {
         module: "feedback",
         key: sessionCode,
+        title: "blocked feedback test",
+        state: JSON.stringify({
+          kind: "batch",
+          semesterId: semester.id,
+          sessionCode,
+          className: "测试班",
+          total: 1,
+          students: [{ id: student.id, name: "张三", labels: [], feedback: "待复核反馈。", reviewStatus: "needs_review" }],
+        }),
+      },
+    });
+
+    const blockedResponse = await GET(new NextRequest(`http://localhost:3000/api/report/feedback-batch?sessionCode=${sessionCode}&module=feedback`));
+    expect(blockedResponse.status).toBe(409);
+    await expect(blockedResponse.json()).resolves.toMatchObject({ error: expect.stringContaining("1 条反馈需要人工确认") });
+
+    await prisma.workHistory.create({
+      data: {
+        module: "feedback",
+        key: sessionCode,
         title: "feedback test",
         state: JSON.stringify({
           kind: "batch",

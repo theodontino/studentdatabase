@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { parseInput, reviewParsed, correctNames, llmCallStream, correctNamesWithLLM } from "@/lib/parser";
 import { SYSTEM_PROMPT } from "@/lib/prompts";
 import { completeClassAttendance } from "@/lib/nlAttendance";
+import { withLLMCacheOperation } from "@/services/llm-cache-service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,61 +40,63 @@ export async function POST(request: NextRequest) {
       const sseStream = new ReadableStream({
         async start(controller) {
           try {
-            // Step 0: Name correction via LLM
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "status", message: "正在修正姓名…" })}\n\n`));
-            const nameFix = await correctNamesWithLLM(rawText, studentNames);
-            const fixedText = nameFix.correctedText;
-            const corrections = nameFix.corrections;
+            await withLLMCacheOperation("classroom-parse", "解析课堂记录", async () => {
+              // Step 0: Name correction via LLM
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "status", message: "正在修正姓名…" })}\n\n`));
+              const nameFix = await correctNamesWithLLM(rawText, studentNames);
+              const fixedText = nameFix.correctedText;
+              const corrections = nameFix.corrections;
 
-            const userPrompt = `已知学生名单：${studentNames.join("、")}
+              const userPrompt = `已知学生名单：${studentNames.join("、")}
 
 教师的输入文本：
 ${fixedText}
 
 请按照 System Prompt 的要求，分析文本并返回 JSON。`;
 
-            let content = "";
-            await llmCallStream([
-              { role: "system", content: SYSTEM_PROMPT },
-              { role: "user", content: userPrompt },
-            ], 0.3, (delta) => {
-              content += delta;
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "chunk", content: delta })}\n\n`));
+              let content = "";
+              await llmCallStream([
+                { role: "system", content: SYSTEM_PROMPT },
+                { role: "user", content: userPrompt },
+              ], 0.3, (delta) => {
+                content += delta;
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "chunk", content: delta })}\n\n`));
+              });
+
+              // Parse JSON from LLM response
+              let cleaned = content.trim();
+              if (cleaned.startsWith("```")) {
+                cleaned = cleaned.replace(/```\w*\n?/, "").replace(/\n?```$/, "");
+              }
+              let parsedResult = JSON.parse(cleaned);
+              parsedResult = correctNames(parsedResult, studentNames);
+
+              // Review only the content inferred by the LLM. Attendance completion is deterministic.
+              let reviewResult = null;
+              try { reviewResult = await reviewParsed(rawText, parsedResult); } catch {}
+              parsedResult = completeClassAttendance(parsedResult, students);
+
+              const nameToId = new Map(students.map((s) => [s.name, s.id]));
+              const matchedStudentIds = parsedResult.students
+                .map((stu: any) => nameToId.get(stu.name) ?? null)
+                .filter(Boolean) as string[];
+
+              // Save draft
+              const draft = await prisma.draftRecord.create({
+                data: {
+                  rawText: fixedText,
+                  parsedResult: JSON.stringify(parsedResult),
+                  reviewResult: reviewResult ? JSON.stringify(reviewResult) : null,
+                  status: "pending",
+                  sessionCode,
+                  studentId: matchedStudentIds[0] ?? null,
+                },
+              });
+
+              controller.enqueue(encoder.encode(
+                `data: ${JSON.stringify({ type: "result", draftId: draft.id, parsedResult, reviewResult, corrections })}\n\n`
+              ));
             });
-
-            // Parse JSON from LLM response
-            let cleaned = content.trim();
-            if (cleaned.startsWith("```")) {
-              cleaned = cleaned.replace(/```\w*\n?/, "").replace(/\n?```$/, "");
-            }
-            let parsedResult = JSON.parse(cleaned);
-            parsedResult = correctNames(parsedResult, studentNames);
-
-            // Review only the content inferred by the LLM. Attendance completion is deterministic.
-            let reviewResult = null;
-            try { reviewResult = await reviewParsed(rawText, parsedResult); } catch {}
-            parsedResult = completeClassAttendance(parsedResult, students);
-
-            const nameToId = new Map(students.map((s) => [s.name, s.id]));
-            const matchedStudentIds = parsedResult.students
-              .map((stu: any) => nameToId.get(stu.name) ?? null)
-              .filter(Boolean) as string[];
-
-            // Save draft
-            const draft = await prisma.draftRecord.create({
-              data: {
-                rawText: fixedText,
-                parsedResult: JSON.stringify(parsedResult),
-                reviewResult: reviewResult ? JSON.stringify(reviewResult) : null,
-                status: "pending",
-                sessionCode,
-                studentId: matchedStudentIds[0] ?? null,
-              },
-            });
-
-            controller.enqueue(encoder.encode(
-              `data: ${JSON.stringify({ type: "result", draftId: draft.id, parsedResult, reviewResult, corrections })}\n\n`
-            ));
             controller.close();
           } catch (e: any) {
             controller.enqueue(encoder.encode(
@@ -108,55 +111,58 @@ ${fixedText}
       });
     }
 
-    // v0.13: Step 0 — correct names via LLM before parsing
-    const nameFix = await correctNamesWithLLM(rawText, studentNames);
-    const fixedText = nameFix.correctedText;
-    const corrections = nameFix.corrections;
+    const result = await withLLMCacheOperation("classroom-parse", "解析课堂记录", async () => {
+      // v0.13: Step 0 — correct names via LLM before parsing
+      const nameFix = await correctNamesWithLLM(rawText, studentNames);
+      const fixedText = nameFix.correctedText;
+      const corrections = nameFix.corrections;
 
-    // Step 1: LLM parse
-    let parsedResult = await parseInput(fixedText, studentNames);
+      // Step 1: LLM parse
+      let parsedResult = await parseInput(fixedText, studentNames);
 
     // v0.5: fuzzy-correct student names to exact DB names
-    parsedResult = correctNames(parsedResult, studentNames);
+      parsedResult = correctNames(parsedResult, studentNames);
 
     // Self-review before deterministic roster completion.
-    let reviewResult = null;
-    try {
-      reviewResult = await reviewParsed(rawText, parsedResult);
-    } catch (reviewError) {
-      console.error("LLM self-review failed:", reviewError);
-    }
+      let reviewResult = null;
+      try {
+        reviewResult = await reviewParsed(rawText, parsedResult);
+      } catch (reviewError) {
+        console.error("LLM self-review failed:", reviewError);
+      }
 
-    parsedResult = completeClassAttendance(parsedResult, students);
+      parsedResult = completeClassAttendance(parsedResult, students);
 
     // v0.10: match students by corrected name to get studentId
-    const nameToId = new Map(students.map((s) => [s.name, s.id]));
-    const matchedStudentIds = parsedResult.students
-      .map((stu) => nameToId.get(stu.name) ?? null)
-      .filter(Boolean) as string[];
+      const nameToId = new Map(students.map((s) => [s.name, s.id]));
+      const matchedStudentIds = parsedResult.students
+        .map((stu) => nameToId.get(stu.name) ?? null)
+        .filter(Boolean) as string[];
 
     // Step 3: Save as draft
-    const draft = await prisma.draftRecord.create({
-      data: {
-        rawText,
-        parsedResult: JSON.stringify(parsedResult),
-        reviewResult: reviewResult ? JSON.stringify(reviewResult) : null,
-        status: "pending",
-        sessionCode,
-        studentId: matchedStudentIds[0] ?? null,  // v0.10: store primary matched studentId
-      },
-    });
+      const draft = await prisma.draftRecord.create({
+        data: {
+          rawText,
+          parsedResult: JSON.stringify(parsedResult),
+          reviewResult: reviewResult ? JSON.stringify(reviewResult) : null,
+          status: "pending",
+          sessionCode,
+          studentId: matchedStudentIds[0] ?? null,  // v0.10: store primary matched studentId
+        },
+      });
 
-    return NextResponse.json({
-      draftId: draft.id,
-      rawText: draft.rawText,
-      parsedResult,
-      reviewResult,
-      status: draft.status,
-      sessionCode: draft.sessionCode,
-      createdAt: draft.createdAt,
-      corrections,
+      return {
+        draftId: draft.id,
+        rawText: draft.rawText,
+        parsedResult,
+        reviewResult,
+        status: draft.status,
+        sessionCode: draft.sessionCode,
+        createdAt: draft.createdAt,
+        corrections,
+      };
     });
+    return NextResponse.json(result);
   } catch (error) {
     console.error("[/api/input/parse] error:", error);
     return NextResponse.json({ error: "LLM 解析失败，请稍后重试" }, { status: 500 });

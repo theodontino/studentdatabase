@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createLLMClient, getLLMModel } from "@/lib/llm";
+import { withLLMCacheOperation } from "@/services/llm-cache-service";
 
 // POST /api/report/daily — 按课次生成班级日报
 export async function POST(request: NextRequest) {
@@ -60,13 +61,15 @@ ${studentLines.join("\n")}
 
 请直接返回日报文本，不要附带标题或markdown。`;
 
-    const client = createLLMClient();
-    const model = getLLMModel();
-    const resp = await client.chat.completions.create({
-      model, messages: [{ role: "user", content: prompt }],
-      temperature: 0.5, max_tokens: 1024,
+    const report = await withLLMCacheOperation("daily-report", "生成班级日报", async () => {
+      const client = createLLMClient();
+      const model = getLLMModel();
+      const resp = await client.chat.completions.create({
+        model, messages: [{ role: "user", content: prompt }],
+        temperature: 0.5, max_tokens: 1024,
+      });
+      return resp.choices[0]?.message?.content?.trim() || "";
     });
-    const report = resp.choices[0]?.message?.content?.trim() || "";
 
     return NextResponse.json({ report, sessionCode, className, date: session.date, studentCount: students.length });
   } catch (error) {

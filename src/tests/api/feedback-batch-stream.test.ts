@@ -86,7 +86,9 @@ describe("feedback batch NDJSON stream", () => {
     mocks.historyCreate.mockReset().mockResolvedValue({ id: "history-1" });
     mocks.completionCreate.mockReset()
       .mockResolvedValueOnce({ choices: [{ message: { content: "甲反馈" } }] })
-      .mockResolvedValueOnce({ choices: [{ message: { content: "乙反馈" } }] });
+      .mockResolvedValueOnce({ choices: [{ message: { content: "乙反馈" } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: JSON.stringify({ verdict: "pass", feedback: "甲反馈", issues: [] }) } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: JSON.stringify({ verdict: "pass", feedback: "乙反馈", issues: [] }) } }] });
   });
 
   it("streams progress by studentId, persists final cards, and returns full cached data", async () => {
@@ -100,7 +102,7 @@ describe("feedback batch NDJSON stream", () => {
     expect(response.headers.get("content-type")).toContain("application/x-ndjson");
     const events = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
 
-    expect(events.map((event) => event.type)).toEqual(["init", "progress", "progress", "done"]);
+    expect(events.map((event) => event.type)).toEqual(["init", "draft", "draft", "review", "review", "done"]);
     expect(events[0].students[0]).toMatchObject({
       id: "student-1",
       contextPreview: expect.objectContaining({
@@ -108,11 +110,11 @@ describe("feedback batch NDJSON stream", () => {
         communications: ["与母亲：希望多强调进步"],
       }),
     });
-    expect(events[1]).toMatchObject({ studentId: "student-1", name: "学生甲", feedback: "甲反馈" });
-    expect(events[2]).toMatchObject({ studentId: "student-2", name: "学生乙", feedback: "乙反馈" });
-    expect(events[3].students).toEqual([
-      expect.objectContaining({ id: "student-1", feedback: "甲反馈" }),
-      expect.objectContaining({ id: "student-2", feedback: "乙反馈" }),
+    expect(events[1]).toMatchObject({ type: "draft", studentId: "student-1", name: "学生甲", feedback: "甲反馈" });
+    expect(events[3]).toMatchObject({ type: "review", studentId: "student-1", feedback: "甲反馈", reviewStatus: "passed" });
+    expect(events[5].students).toEqual([
+      expect.objectContaining({ id: "student-1", feedback: "甲反馈", reviewStatus: "passed" }),
+      expect.objectContaining({ id: "student-2", feedback: "乙反馈", reviewStatus: "passed" }),
     ]);
     expect(mocks.historyCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ module: "feedback", key: "VITEST-STREAM" }),
@@ -139,22 +141,24 @@ describe("feedback batch NDJSON stream", () => {
         expect.objectContaining({ id: "student-2", feedback: "乙反馈" }),
       ],
     });
-    expect(mocks.completionCreate).toHaveBeenCalledTimes(2);
+    expect(mocks.completionCreate).toHaveBeenCalledTimes(4);
 
     mocks.completionCreate
       .mockResolvedValueOnce({ choices: [{ message: { content: "甲新反馈" } }] })
-      .mockResolvedValueOnce({ choices: [{ message: { content: "乙新反馈" } }] });
+      .mockResolvedValueOnce({ choices: [{ message: { content: "乙新反馈" } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: JSON.stringify({ verdict: "pass", feedback: "甲新反馈", issues: [] }) } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: JSON.stringify({ verdict: "pass", feedback: "乙新反馈", issues: [] }) } }] });
     const refreshed = await POST(new NextRequest("http://localhost:3000/api/report/feedback-batch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionCode: "VITEST-STREAM", historyModule: "feedback", bypassCache: true }),
     }));
     const refreshedEvents = (await refreshed.text()).trim().split("\n").map((line) => JSON.parse(line));
-    expect(refreshedEvents[3].students).toEqual([
+    expect(refreshedEvents[5].students).toEqual([
       expect.objectContaining({ id: "student-1", feedback: "甲新反馈" }),
       expect.objectContaining({ id: "student-2", feedback: "乙新反馈" }),
     ]);
-    expect(mocks.completionCreate).toHaveBeenCalledTimes(4);
+    expect(mocks.completionCreate).toHaveBeenCalledTimes(8);
 
     const saved = await POST(new NextRequest("http://localhost:3000/api/report/feedback-batch", {
       method: "POST",
@@ -178,7 +182,7 @@ describe("feedback batch NDJSON stream", () => {
         expect.objectContaining({ id: "student-2", feedback: "乙手动编辑反馈" }),
       ],
     });
-    expect(mocks.completionCreate).toHaveBeenCalledTimes(4);
+    expect(mocks.completionCreate).toHaveBeenCalledTimes(8);
 
     const cachedAfterSave = await POST(request());
     await expect(cachedAfterSave.json()).resolves.toMatchObject({
@@ -195,7 +199,8 @@ describe("feedback batch NDJSON stream", () => {
       .mockResolvedValueOnce({ choices: [{ message: { content: "" } }] })
       .mockResolvedValueOnce({ choices: [{ message: { content: "甲重试反馈" } }] })
       .mockResolvedValueOnce({ choices: [{ message: { content: "" } }] })
-      .mockResolvedValueOnce({ choices: [{ message: { content: "" } }] });
+      .mockResolvedValueOnce({ choices: [{ message: { content: "" } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: JSON.stringify({ verdict: "pass", feedback: "甲重试反馈", issues: [] }) } }] });
 
     const response = await POST(new NextRequest("http://localhost:3000/api/report/feedback-batch", {
       method: "POST",
@@ -206,6 +211,8 @@ describe("feedback batch NDJSON stream", () => {
 
     expect(events[1]).toMatchObject({ studentId: "student-1", feedback: "甲重试反馈" });
     expect(events[2]).toMatchObject({ studentId: "student-2", feedback: "[生成失败，请重试]" });
+    expect(events[3]).toMatchObject({ studentId: "student-1", reviewStatus: "passed" });
+    expect(events[4]).toMatchObject({ studentId: "student-2", reviewStatus: "needs_review" });
     expect(mocks.completionCreate).toHaveBeenCalledWith(expect.objectContaining({
       max_tokens: 2048,
     }));

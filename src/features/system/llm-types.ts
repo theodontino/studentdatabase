@@ -11,12 +11,19 @@ export interface LLMProfile {
 export interface LLMSettingsResponse {
   activeProfileId: string | null;
   profiles: LLMProfile[];
+  roleAssignments: LLMRoleAssignments;
   effectiveSettings: {
     apiBaseUrl: string;
     apiKey: string;
     model: string;
     updatedAt?: string;
   };
+}
+
+export interface LLMRoleAssignments {
+  feedbackDraftProfileId: string | null;
+  feedbackReviewProfileId: string | null;
+  wecomExtractionProfileId: string | null;
 }
 
 export type LLMProfileForm = Partial<LLMProfile> & {

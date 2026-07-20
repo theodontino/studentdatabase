@@ -16,9 +16,18 @@ export interface LLMProfile extends LLMSettings {
   updatedAt: string;
 }
 
+export type LLMProfileRole = "feedbackDraft" | "feedbackReview" | "wecomExtraction";
+
+export interface LLMRoleAssignments {
+  feedbackDraftProfileId: string | null;
+  feedbackReviewProfileId: string | null;
+  wecomExtractionProfileId: string | null;
+}
+
 export interface LLMSettingsStore {
   activeProfileId: string | null;
   profiles: LLMProfile[];
+  roleAssignments: LLMRoleAssignments;
 }
 
 const DEFAULT_API_BASE_URL = "https://api.openai.com/v1";
@@ -55,8 +64,35 @@ function normalizeProfile(input: Partial<LLMProfile>, fallbackName = "默认配�
   };
 }
 
+function emptyRoleAssignments(): LLMRoleAssignments {
+  return {
+    feedbackDraftProfileId: null,
+    feedbackReviewProfileId: null,
+    wecomExtractionProfileId: null,
+  };
+}
+
+function normalizeRoleAssignments(value: unknown, profiles: LLMProfile[]): LLMRoleAssignments {
+  const input = value && typeof value === "object" ? value as Partial<LLMRoleAssignments> : {};
+  const profileIds = new Set(profiles.map((profile) => profile.id));
+  return {
+    feedbackDraftProfileId: typeof input.feedbackDraftProfileId === "string"
+      && profileIds.has(input.feedbackDraftProfileId)
+      ? input.feedbackDraftProfileId
+      : null,
+    feedbackReviewProfileId: typeof input.feedbackReviewProfileId === "string"
+      && profileIds.has(input.feedbackReviewProfileId)
+      ? input.feedbackReviewProfileId
+      : null,
+    wecomExtractionProfileId: typeof input.wecomExtractionProfileId === "string"
+      && profileIds.has(input.wecomExtractionProfileId)
+      ? input.wecomExtractionProfileId
+      : null,
+  };
+}
+
 function emptyStore(): LLMSettingsStore {
-  return { activeProfileId: null, profiles: [] };
+  return { activeProfileId: null, profiles: [], roleAssignments: emptyRoleAssignments() };
 }
 
 function parseStore(raw: any): LLMSettingsStore {
@@ -67,14 +103,18 @@ function parseStore(raw: any): LLMSettingsStore {
     const activeProfileId = profiles.some((profile) => profile.id === raw.activeProfileId)
       ? raw.activeProfileId
       : profiles[0]?.id ?? null;
-    return { activeProfileId, profiles };
+    return {
+      activeProfileId,
+      profiles,
+      roleAssignments: normalizeRoleAssignments(raw.roleAssignments, profiles),
+    };
   }
 
   // Backward compatible with the previous single-profile JSON shape.
   const legacy = normalizeSettings(raw || {});
   if (!legacy.apiBaseUrl && !legacy.apiKey && !legacy.model) return emptyStore();
   const profile = normalizeProfile({ ...legacy, id: "default", name: "默认配置" });
-  return { activeProfileId: profile.id, profiles: [profile] };
+  return { activeProfileId: profile.id, profiles: [profile], roleAssignments: emptyRoleAssignments() };
 }
 
 function readStore(): LLMSettingsStore {
@@ -99,10 +139,18 @@ export function getLLMSettingsStore(): LLMSettingsStore {
   return readStore();
 }
 
-/** Returns the effective LLM settings, using the active Web UI profile before .env values. */
-export function getEffectiveLLMSettings(): LLMSettings {
+/** Returns role-specific settings, falling back to the active Web UI profile and then .env. */
+export function getEffectiveLLMSettings(role?: LLMProfileRole): LLMSettings {
   const store = readStore();
-  const activeProfile = store.profiles.find((profile) => profile.id === store.activeProfileId);
+  const assignedProfileId = role === "feedbackDraft"
+    ? store.roleAssignments.feedbackDraftProfileId
+    : role === "feedbackReview"
+      ? store.roleAssignments.feedbackReviewProfileId
+      : role === "wecomExtraction"
+        ? store.roleAssignments.wecomExtractionProfileId
+        : null;
+  const activeProfile = store.profiles.find((profile) => profile.id === assignedProfileId)
+    ?? store.profiles.find((profile) => profile.id === store.activeProfileId);
   return {
     apiBaseUrl: activeProfile?.apiBaseUrl || process.env.LLM_API_BASE_URL || DEFAULT_API_BASE_URL,
     apiKey: activeProfile?.apiKey || process.env.LLM_API_KEY || "",
@@ -161,12 +209,42 @@ export function activateLLMProfile(profileId: string): LLMSettingsStore {
   return store;
 }
 
+export function saveLLMRoleAssignments(input: Partial<LLMRoleAssignments>): LLMSettingsStore {
+  const store = readStore();
+  const next = {
+    feedbackDraftProfileId: input.feedbackDraftProfileId ?? null,
+    feedbackReviewProfileId: input.feedbackReviewProfileId ?? null,
+    wecomExtractionProfileId: input.wecomExtractionProfileId ?? null,
+  };
+  for (const profileId of [
+    next.feedbackDraftProfileId,
+    next.feedbackReviewProfileId,
+    next.wecomExtractionProfileId,
+  ]) {
+    if (profileId && !store.profiles.some((profile) => profile.id === profileId)) {
+      throw new Error("角色配置引用的 LLM 配置不存在");
+    }
+  }
+  store.roleAssignments = next;
+  writeStore(store);
+  return store;
+}
+
 export function deleteLLMProfile(profileId: string): LLMSettingsStore {
   const store = readStore();
   const nextProfiles = store.profiles.filter((profile) => profile.id !== profileId);
   if (nextProfiles.length === store.profiles.length) throw new Error("配置不存在");
   store.profiles = nextProfiles;
   if (store.activeProfileId === profileId) store.activeProfileId = store.profiles[0]?.id ?? null;
+  if (store.roleAssignments.feedbackDraftProfileId === profileId) {
+    store.roleAssignments.feedbackDraftProfileId = null;
+  }
+  if (store.roleAssignments.feedbackReviewProfileId === profileId) {
+    store.roleAssignments.feedbackReviewProfileId = null;
+  }
+  if (store.roleAssignments.wecomExtractionProfileId === profileId) {
+    store.roleAssignments.wecomExtractionProfileId = null;
+  }
   writeStore(store);
   return store;
 }

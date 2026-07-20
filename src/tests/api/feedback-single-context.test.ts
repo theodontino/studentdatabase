@@ -50,6 +50,10 @@ describe("/api/report/feedback", () => {
     });
     mocks.completionCreate.mockReset().mockResolvedValue({
       choices: [{ message: { content: "单人重写反馈" } }],
+    }).mockResolvedValueOnce({
+      choices: [{ message: { content: "单人重写反馈" } }],
+    }).mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ verdict: "pass", feedback: "单人重写反馈", issues: [] }) } }],
     });
   });
 
@@ -60,7 +64,12 @@ describe("/api/report/feedback", () => {
       body: JSON.stringify({ studentId: "student-1", sessionCode: "VITEST-SINGLE" }),
     }));
 
-    await expect(response.json()).resolves.toEqual({ feedback: "单人重写反馈" });
+    await expect(response.json()).resolves.toMatchObject({
+      draftFeedback: "单人重写反馈",
+      feedback: "单人重写反馈",
+      reviewStatus: "passed",
+      reviewIssues: [],
+    });
     expect(mocks.buildFeedbackContext).toHaveBeenCalledWith(expect.anything(), "VITEST-SINGLE");
     expect(mocks.completionCreate).toHaveBeenCalledWith(expect.objectContaining({
       max_tokens: 2048,
@@ -78,7 +87,8 @@ describe("/api/report/feedback", () => {
   it("retries once when the LLM returns empty content", async () => {
     mocks.completionCreate.mockReset()
       .mockResolvedValueOnce({ choices: [{ message: { content: "" } }] })
-      .mockResolvedValueOnce({ choices: [{ message: { content: "重试后反馈" } }] });
+      .mockResolvedValueOnce({ choices: [{ message: { content: "重试后反馈" } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: JSON.stringify({ verdict: "pass", feedback: "重试后反馈", issues: [] }) } }] });
 
     const response = await POST(new NextRequest("http://localhost:3000/api/report/feedback", {
       method: "POST",
@@ -86,7 +96,7 @@ describe("/api/report/feedback", () => {
       body: JSON.stringify({ studentId: "student-1", sessionCode: "VITEST-SINGLE" }),
     }));
 
-    await expect(response.json()).resolves.toEqual({ feedback: "重试后反馈" });
-    expect(mocks.completionCreate).toHaveBeenCalledTimes(2);
+    await expect(response.json()).resolves.toMatchObject({ feedback: "重试后反馈", reviewStatus: "passed" });
+    expect(mocks.completionCreate).toHaveBeenCalledTimes(3);
   });
 });

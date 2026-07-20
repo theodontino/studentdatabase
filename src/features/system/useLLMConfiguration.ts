@@ -6,6 +6,7 @@ import {
   EMPTY_LLM_PROFILE,
   type LLMProfile,
   type LLMProfileForm,
+  type LLMRoleAssignments,
   type LLMSettingsResponse,
 } from "./llm-types";
 
@@ -23,6 +24,14 @@ export function useLLMConfiguration() {
   const [error, setError] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [deleteMode, setDeleteMode] = useState<DeleteMode>(null);
+  const [roleAssignments, setRoleAssignments] = useState<LLMRoleAssignments>({
+    feedbackDraftProfileId: null,
+    feedbackReviewProfileId: null,
+    wecomExtractionProfileId: null,
+  });
+  const [roleSaving, setRoleSaving] = useState(false);
+  const [roleStatus, setRoleStatus] = useState("");
+  const [roleError, setRoleError] = useState("");
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -38,6 +47,11 @@ export function useLLMConfiguration() {
         if (cancelled) return;
         setProfiles(data.profiles ?? []);
         setActiveProfileId(data.activeProfileId);
+        setRoleAssignments(data.roleAssignments ?? {
+          feedbackDraftProfileId: null,
+          feedbackReviewProfileId: null,
+          wecomExtractionProfileId: null,
+        });
         const selected = data.profiles?.find((profile) => profile.id === data.activeProfileId) ?? data.profiles?.[0];
         if (selected) {
           setSelectedProfileId(selected.id);
@@ -80,6 +94,11 @@ export function useLLMConfiguration() {
   function applyStore(data: LLMSettingsResponse, preferredId?: string) {
     setProfiles(data.profiles ?? []);
     setActiveProfileId(data.activeProfileId);
+    setRoleAssignments(data.roleAssignments ?? {
+      feedbackDraftProfileId: null,
+      feedbackReviewProfileId: null,
+      wecomExtractionProfileId: null,
+    });
     const next = data.profiles?.find((profile) => profile.id === preferredId)
       ?? data.profiles?.find((profile) => profile.id === data.activeProfileId)
       ?? data.profiles?.[0];
@@ -132,6 +151,31 @@ export function useLLMConfiguration() {
       setError(reason instanceof Error ? reason.message : "切换失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function updateRole(field: keyof LLMRoleAssignments, profileId: string) {
+    setRoleAssignments((current) => ({ ...current, [field]: profileId || null }));
+    setRoleStatus("");
+    setRoleError("");
+  }
+
+  async function saveRoles() {
+    setRoleSaving(true);
+    setRoleStatus("");
+    setRoleError("");
+    try {
+      const data = await requestJson<LLMSettingsResponse>("/api/settings/llm", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleAssignments }),
+      });
+      applyStore(data);
+      setRoleStatus("模型分工已保存。");
+    } catch (reason) {
+      setRoleError(reason instanceof Error ? reason.message : "保存模型分工失败");
+    } finally {
+      setRoleSaving(false);
     }
   }
 
@@ -188,7 +232,12 @@ export function useLLMConfiguration() {
     models,
     newProfile,
     profiles,
+    roleAssignments,
+    roleError,
+    roleSaving,
+    roleStatus,
     saveProfile,
+    saveRoles,
     saving,
     selectProfile,
     selectedProfileId,
@@ -197,5 +246,6 @@ export function useLLMConfiguration() {
     testConnection,
     testing,
     updateField,
+    updateRole,
   };
 }

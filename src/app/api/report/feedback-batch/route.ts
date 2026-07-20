@@ -8,6 +8,15 @@ import {
 } from "@/services/feedback-context-service";
 import { buildFeedbackExportWorkbook } from "@/services/feedback-export-service";
 import { getAlertDashboard } from "@/services/alert-service";
+import {
+  generateFeedbackDraft,
+  reviewFeedbackDraft,
+  type FeedbackReviewStatus,
+} from "@/services/feedback-generation-service";
+import {
+  markCurrentLLMCacheOperationIncomplete,
+  withLLMCacheOperation,
+} from "@/services/llm-cache-service";
 
 type HistoryModule = "feedback" | "report";
 interface FeedbackCard {
@@ -15,6 +24,9 @@ interface FeedbackCard {
   name: string;
   labels: string[];
   feedback: string;
+  draftFeedback?: string;
+  reviewStatus?: FeedbackReviewStatus;
+  reviewIssues?: string[];
   contextPreview?: FeedbackContextPreview;
 }
 interface FeedbackState {
@@ -28,9 +40,6 @@ interface FeedbackState {
 
 const cache = new Map<string, { timestamp: number; state: FeedbackState }>();
 const CACHE_TTL = 30 * 60 * 1000;
-const FEEDBACK_MAX_TOKENS = 2048;
-const FEEDBACK_MAX_ATTEMPTS = 2;
-
 function moduleFrom(value: unknown): HistoryModule | null {
   if (value === undefined || value === null || value === "report") return "report";
   if (value === "feedback") return "feedback";
@@ -38,26 +47,7 @@ function moduleFrom(value: unknown): HistoryModule | null {
 }
 
 function cacheKey(module: HistoryModule, sessionCode: string) {
-  return `${module}:${sessionCode}`;
-}
-
-async function generateFeedbackText(
-  client: ReturnType<typeof createLLMClient>,
-  model: string,
-  prompt: string
-) {
-  for (let attempt = 1; attempt <= FEEDBACK_MAX_ATTEMPTS; attempt += 1) {
-    const response = await client.chat.completions.create({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.5,
-      max_tokens: FEEDBACK_MAX_TOKENS,
-    });
-    const content = response.choices[0]?.message?.content?.trim();
-    if (content) return content;
-  }
-
-  throw new Error("LLM 返回空反馈内容，请重试");
+  return `review-v1:${module}:${sessionCode}`;
 }
 
 function parseHistoryState(value: string): FeedbackState | null {
@@ -85,11 +75,24 @@ function submittedCardsFrom(
     const feedback = "feedback" in item && typeof item.feedback === "string"
       ? item.feedback.trim()
       : "";
+    const draftFeedback = "draftFeedback" in item && typeof item.draftFeedback === "string"
+      ? item.draftFeedback.trim()
+      : undefined;
+    const reviewStatus = "reviewStatus" in item
+      && ["passed", "revised", "needs_review", "edited"].includes(String(item.reviewStatus))
+      ? item.reviewStatus as FeedbackReviewStatus
+      : undefined;
+    const reviewIssues = "reviewIssues" in item && Array.isArray(item.reviewIssues)
+      ? item.reviewIssues.filter((issue: unknown): issue is string => typeof issue === "string").slice(0, 8)
+      : undefined;
     cards.push({
       id: student.id,
       name: student.name,
       labels: student.labels,
       feedback,
+      draftFeedback,
+      reviewStatus,
+      reviewIssues,
       contextPreview: student.preview,
     });
   }
@@ -120,6 +123,13 @@ export async function GET(request: NextRequest) {
   }
 
   if (!state) return NextResponse.json({ error: "尚未生成反馈" }, { status: 404 });
+  const reviewBlockerCount = state.students.filter((card) => card.reviewStatus === "needs_review").length;
+  if (reviewBlockerCount > 0) {
+    return NextResponse.json(
+      { error: `还有 ${reviewBlockerCount} 条反馈需要人工确认，暂不能导出` },
+      { status: 409 },
+    );
+  }
   const dashboard = await getAlertDashboard({ semesterId: state.semesterId });
   const buffer = await buildFeedbackExportWorkbook(
     prisma,
@@ -182,8 +192,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ saved: true, ...state });
     }
 
-    const client = createLLMClient();
-    const model = getLLMModel();
+    const draftClient = createLLMClient("feedbackDraft");
+    const draftModel = getLLMModel("feedbackDraft");
+    const reviewClient = createLLMClient("feedbackReview");
+    const reviewModel = getLLMModel("feedbackReview");
     const total = feedbackContext.total;
     const cards: FeedbackCard[] = feedbackContext.students.map((student) => ({
       id: student.id,
@@ -197,46 +209,90 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          controller.enqueue(encoder.encode(JSON.stringify({ type: "init", students: cards, total }) + "\n"));
+          await withLLMCacheOperation("feedback", "批量生成并审核反馈", async () => {
+            controller.enqueue(encoder.encode(JSON.stringify({ type: "init", students: cards, total }) + "\n"));
 
-          for (const card of cards) {
-            const studentContext = contextByStudent.get(card.id);
-            const prompt = `${studentContext?.promptContext ?? card.name}\n\n请为${card.name}生成50-80字家校反馈，只反馈该生本人表现，不比较、不提其他学生姓名。温和客观，直接返回。`;
+            for (let index = 0; index < cards.length; index += 1) {
+              const card = cards[index];
+              const studentContext = contextByStudent.get(card.id);
+              try {
+                card.draftFeedback = await generateFeedbackDraft({
+                  studentName: card.name,
+                  promptContext: studentContext?.promptContext ?? card.name,
+                  lengthRequirement: "50-80字",
+                  client: draftClient,
+                  model: draftModel,
+                });
+                card.feedback = card.draftFeedback;
+              } catch (error) {
+                console.error(`[feedback-batch] draft failed for student ${card.id}:`, error);
+                card.feedback = "[生成失败，请重试]";
+                card.reviewStatus = "needs_review";
+                card.reviewIssues = ["起草模型生成失败，请单独重写或人工填写"];
+              }
 
-            try {
-              card.feedback = await generateFeedbackText(client, model, prompt);
-            } catch (error) {
-              console.error(`[feedback-batch] ${card.name} failed:`, error);
-              card.feedback = "[生成失败，请重试]";
+              controller.enqueue(encoder.encode(JSON.stringify({
+                type: "draft",
+                studentId: card.id,
+                name: card.name,
+                feedback: card.feedback,
+                completed: index + 1,
+                total,
+              }) + "\n"));
             }
 
-            controller.enqueue(encoder.encode(JSON.stringify({
-              type: "progress",
-              studentId: card.id,
-              name: card.name,
-              feedback: card.feedback,
-            }) + "\n"));
-          }
+            for (let index = 0; index < cards.length; index += 1) {
+              const card = cards[index];
+              const studentContext = contextByStudent.get(card.id);
+              if (card.draftFeedback) {
+                const reviewed = await reviewFeedbackDraft({
+                  studentName: card.name,
+                  promptContext: studentContext?.promptContext ?? card.name,
+                  forbiddenStudentNames: cards.filter((item) => item.id !== card.id).map((item) => item.name),
+                  lengthRequirement: "50-80字",
+                  draftFeedback: card.draftFeedback,
+                  client: reviewClient,
+                  model: reviewModel,
+                });
+                Object.assign(card, reviewed);
+              }
+              controller.enqueue(encoder.encode(JSON.stringify({
+                type: "review",
+                studentId: card.id,
+                name: card.name,
+                feedback: card.feedback,
+                draftFeedback: card.draftFeedback,
+                reviewStatus: card.reviewStatus,
+                reviewIssues: card.reviewIssues,
+                completed: index + 1,
+                total,
+              }) + "\n"));
+            }
 
-          const state: FeedbackState = {
-            kind: "batch",
-            semesterId: feedbackContext.session.semesterId,
-            sessionCode,
-            className: feedbackContext.className,
-            students: cards,
-            total,
-          };
-          cache.set(key, { timestamp: Date.now(), state });
-          await prisma.workHistory.create({
-            data: {
-              module: historyModule,
-              key: sessionCode,
-              title: `${feedbackContext.className} ${sessionCode} 批量反馈`,
-              state: JSON.stringify(state),
-            },
+            if (cards.some((card) => card.reviewStatus === "needs_review")) {
+              markCurrentLLMCacheOperationIncomplete();
+            }
+
+            const state: FeedbackState = {
+              kind: "batch",
+              semesterId: feedbackContext.session.semesterId,
+              sessionCode,
+              className: feedbackContext.className,
+              students: cards,
+              total,
+            };
+            cache.set(key, { timestamp: Date.now(), state });
+            await prisma.workHistory.create({
+              data: {
+                module: historyModule,
+                key: sessionCode,
+                title: `${feedbackContext.className} ${sessionCode} 批量反馈`,
+                state: JSON.stringify(state),
+              },
+            });
+
+            controller.enqueue(encoder.encode(JSON.stringify({ type: "done", ...state }) + "\n"));
           });
-
-          controller.enqueue(encoder.encode(JSON.stringify({ type: "done", ...state }) + "\n"));
           controller.close();
         } catch (error) {
           console.error("[/api/report/feedback-batch] stream error:", error);

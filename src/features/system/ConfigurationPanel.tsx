@@ -3,6 +3,7 @@
 import { ConfirmDialog, PageHeader } from "@/components/ui";
 import { LLMProfileEditor } from "./LLMProfileEditor";
 import { LLMProfileList } from "./LLMProfileList";
+import { LLMRoleAssignmentsPanel } from "./LLMRoleAssignmentsPanel";
 import { useLLMConfiguration } from "./useLLMConfiguration";
 
 export default function ConfigurationPanel() {
@@ -12,6 +13,7 @@ export default function ConfigurationPanel() {
     <main className="system-configuration-workspace">
       <PageHeader title="LLM 配置" description="管理本地与备用模型连接。配置只用于本机工作区。" />
       <div className="system-configuration-grid"><LLMProfileList workspace={workspace} /><LLMProfileEditor workspace={workspace} /></div>
+      <LLMRoleAssignmentsPanel workspace={workspace} />
       <ConfirmDialog
         open={Boolean(workspace.deleteMode)}
         title={deletingAll ? "清除全部 Web 配置" : "删除当前配置"}
