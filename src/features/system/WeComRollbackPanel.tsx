@@ -10,6 +10,15 @@ interface AttentionBatch {
   status: "needs_review" | "failed";
   messageCount: number;
   canRetry: boolean;
+  canReextract: boolean;
+  attemptCount: number;
+  failureCode: string | null;
+  modelName: string | null;
+  finishReason: string | null;
+  promptVersion: string | null;
+  reasoningTokens: number | null;
+  completionTokens: number | null;
+  responseCharacters: number | null;
 }
 
 interface ImportRun {
@@ -40,7 +49,18 @@ type PendingRollback =
   | { kind: "run"; id: string; label: string }
   | { kind: "date"; date: string }
   | { kind: "retry"; id: string; label: string }
+  | { kind: "reextract"; id: string; label: string; changeModel: boolean }
   | { kind: "ignore"; id: string; label: string };
+
+const failureLabels: Record<string, string> = {
+  protocol_incompatible: "协议不兼容",
+  output_truncated: "输出截断",
+  schema_invalid: "Schema 校验失败",
+  network_error: "网络错误",
+  provider_error: "模型服务错误",
+  oversized_message: "超长消息待人工复核",
+  batch_failed: "批次处理失败",
+};
 
 function localDate() {
   const now = new Date();
@@ -76,6 +96,8 @@ export default function WeComRollbackPanel() {
         ? { action: "rollback-date", date: pending.date }
         : pending.kind === "retry"
           ? { action: "retry-batch", batchId: pending.id }
+          : pending.kind === "reextract"
+            ? { action: "retry-extraction", batchId: pending.id }
           : { action: "ignore-batch", batchId: pending.id };
     try {
       const result = await requestJson<{
@@ -90,6 +112,8 @@ export default function WeComRollbackPanel() {
       });
       if (pending.kind === "retry") {
         setStatus(`已重新校验，新增 ${result.createdCount ?? 0} 条沟通。`);
+      } else if (pending.kind === "reextract") {
+        setStatus("失败交流段已重新排队；下次一键导入会使用当前企微提取模型。");
       } else if (pending.kind === "ignore") {
         setStatus("已确认忽略该批次，之后不会自动写入。");
       } else {
@@ -172,15 +196,38 @@ export default function WeComRollbackPanel() {
                       {run.attentionBatches.map((batch) => (
                         <div key={batch.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-amber-50 p-2">
                           <span className="text-sm text-gray-700">
-                            {batch.conversationTitle} · {batch.status === "needs_review" ? "已读但未写入" : "处理失败"}
+                            {batch.conversationTitle} · {batch.failureCode
+                              ? failureLabels[batch.failureCode] || batch.failureCode
+                              : batch.status === "needs_review" ? "已读但未写入" : "处理失败"}
+                            {` · ${batch.messageCount} 条 · 已尝试 ${batch.attemptCount} 次`}
                           </span>
+                          {(batch.modelName || batch.finishReason || batch.completionTokens !== null) && (
+                            <span className="basis-full text-xs text-gray-500">
+                              {[batch.modelName, batch.finishReason && `结束：${batch.finishReason}`,
+                                batch.completionTokens !== null && `输出 token：${batch.completionTokens}`,
+                                batch.reasoningTokens !== null && `推理 token：${batch.reasoningTokens}`,
+                                batch.responseCharacters !== null && `正文：${batch.responseCharacters} 字符`]
+                                .filter(Boolean).join(" · ")}
+                            </span>
+                          )}
                           <div className="flex gap-2">
-                            <Button
+                            {batch.canRetry && <Button
                               variant="secondary"
                               uiSize="sm"
-                              disabled={!batch.canRetry || busy}
+                              disabled={busy}
                               onClick={() => setPending({ kind: "retry", id: batch.id, label: batch.conversationTitle })}
-                            >重新校验</Button>
+                            >重新校验候选</Button>}
+                            {batch.canReextract && <Button
+                              variant="secondary"
+                              uiSize="sm"
+                              disabled={busy}
+                              onClick={() => setPending({
+                                kind: "reextract",
+                                id: batch.id,
+                                label: batch.conversationTitle,
+                                changeModel: batch.failureCode === "protocol_incompatible",
+                              })}
+                            >{batch.failureCode === "protocol_incompatible" ? "更换模型后重试" : "重新提取失败段"}</Button>}
                             <Button
                               variant="ghost"
                               uiSize="sm"
@@ -201,16 +248,22 @@ export default function WeComRollbackPanel() {
 
       <ConfirmDialog
         open={Boolean(pending)}
-        title={pending?.kind === "retry" ? "重新校验候选" : pending?.kind === "ignore" ? "确认忽略候选" : "确认回滚企微导入"}
+        title={pending?.kind === "retry"
+          ? "重新校验候选"
+          : pending?.kind === "reextract"
+            ? pending.changeModel ? "更换模型后重试" : "重新提取失败段"
+            : pending?.kind === "ignore" ? "确认忽略候选" : "确认回滚企微导入"}
         description={pending?.kind === "run"
           ? `将删除“${pending.label}”这次运行新增的沟通；仍被其他批次支持的标签会保留。原始企微聊天不受影响。`
           : pending?.kind === "date"
             ? `将回滚 ${pending.date} 当天所有可回滚的企微导入。`
             : pending?.kind === "retry"
               ? `将重新校验“${pending.label}”，只有全部检查通过才会写入。`
+              : pending?.kind === "reextract"
+                ? `将“${pending.label}”重新排队；下次一键导入才会调用当前配置的企微提取模型。`
               : `将“${pending?.label || ""}”标记为已忽略并删除暂存候选。`}
-        confirmLabel={pending?.kind === "retry" ? "重新校验" : pending?.kind === "ignore" ? "确认忽略" : "确认回滚"}
-        danger={pending?.kind !== "retry"}
+        confirmLabel={pending?.kind === "retry" ? "重新校验" : pending?.kind === "reextract" ? "重新排队" : pending?.kind === "ignore" ? "确认忽略" : "确认回滚"}
+        danger={pending?.kind !== "retry" && pending?.kind !== "reextract"}
         busy={busy}
         onConfirm={() => void performAction()}
         onClose={() => setPending(null)}

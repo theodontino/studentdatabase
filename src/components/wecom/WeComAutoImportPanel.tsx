@@ -17,6 +17,7 @@ interface CompleteEvent {
   conversationCount: number;
   messageCount: number;
   batchCount: number;
+  attentionBatchCount: number;
 }
 
 interface WeComAutoImportPanelProps {
@@ -112,9 +113,10 @@ export default function WeComAutoImportPanel({ onApplied }: WeComAutoImportPanel
 
         {error && <StatusBanner tone="danger">{error}；已成功批次不会重复调用 LLM，可从失败批次继续。</StatusBanner>}
         {complete && (
-          <StatusBanner tone="success">
+          <StatusBanner tone={complete.attentionBatchCount > 0 ? "warning" : "success"}>
             处理 {complete.conversationCount} 个会话、{complete.messageCount} 条新消息，写入 {complete.result.createdCount} 条家校沟通，
             新增 {complete.result.createdLabelCount} 个内部关注标签。
+            {complete.attentionBatchCount > 0 && ` ${complete.attentionBatchCount} 个交流段已暂停或等待人工处理，请到“维护与日志”查看。`}
           </StatusBanner>
         )}
       </section>

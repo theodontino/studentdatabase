@@ -136,6 +136,15 @@ erDiagram
     INTEGER labelCount
     TEXT candidateJson
     DATETIME extractedAt
+    INTEGER attemptCount
+    TEXT failureCode
+    TEXT modelName
+    TEXT finishReason
+    TEXT promptVersion
+    INTEGER promptTokens
+    INTEGER reasoningTokens
+    INTEGER completionTokens
+    INTEGER responseCharacters
     DATETIME startedAt
     DATETIME completedAt
     DATETIME rolledBackAt
@@ -397,6 +406,15 @@ erDiagram
 | `labelCount` | `INTEGER` | 是 | default: 0 |
 | `candidateJson` | `TEXT` | 否 |  |
 | `extractedAt` | `DATETIME` | 否 |  |
+| `attemptCount` | `INTEGER` | 是 | default: 0 |
+| `failureCode` | `TEXT` | 否 |  |
+| `modelName` | `TEXT` | 否 |  |
+| `finishReason` | `TEXT` | 否 |  |
+| `promptVersion` | `TEXT` | 否 |  |
+| `promptTokens` | `INTEGER` | 否 |  |
+| `reasoningTokens` | `INTEGER` | 否 |  |
+| `completionTokens` | `INTEGER` | 否 |  |
+| `responseCharacters` | `INTEGER` | 否 |  |
 | `startedAt` | `DATETIME` | 是 | default: CURRENT_TIMESTAMP |
 | `completedAt` | `DATETIME` | 否 |  |
 | `rolledBackAt` | `DATETIME` | 否 |  |

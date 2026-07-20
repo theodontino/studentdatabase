@@ -104,6 +104,9 @@ test.describe.serial("v0.16.0 core browser smoke tests", () => {
             name: student.name,
             labels: [],
             feedback: `模拟反馈：${student.name}本节课表现稳定。`,
+            draftFeedback: `模拟反馈：${student.name}本节课表现稳定。`,
+            reviewStatus: "passed",
+            reviewIssues: [],
           })),
         }),
       });
@@ -118,9 +121,9 @@ test.describe.serial("v0.16.0 core browser smoke tests", () => {
     await expect(page.getByText(TEST_FIXTURE.students[0].name, { exact: true }).first()).toBeVisible();
 
     await page.getByRole("button", { name: "4 生成 生成反馈" }).click();
-    await page.getByRole("button", { name: "批量生成" }).click();
-    await expect(page.getByText("反馈已生成。", { exact: true })).toBeVisible();
-    await expect(page.getByText("反馈已就绪，请逐条检查和编辑后再导出。", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "批量生成并审核" }).click();
+    await expect(page.getByText("反馈已生成并完成 AI 审核。", { exact: true })).toBeVisible();
+    await expect(page.getByText("反馈已完成起草与 AI 审核，请逐条检查后再导出。", { exact: true })).toBeVisible();
     await expect(page.getByText(`模拟反馈：${TEST_FIXTURE.students[0].name}本节课表现稳定。`, { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "历史", exact: true }).click();
@@ -128,6 +131,20 @@ test.describe.serial("v0.16.0 core browser smoke tests", () => {
     await historyRow.getByRole("button", { name: "恢复" }).click();
     await expect(page.getByText("已恢复历史反馈结果。", { exact: true })).toBeVisible();
     await expect(page.getByText(`历史恢复反馈：${TEST_FIXTURE.students[0].name}表现稳定。`, { exact: true })).toBeVisible();
+    expect(externalRequests).toEqual([]);
+  });
+
+  test("system UI exposes the WeCom extraction role and safe LLM cache maintenance", async ({ page }) => {
+    const externalRequests = await blockExternalRequests(page);
+    await page.goto("/system/configuration");
+    await expect(page.getByRole("heading", { name: "LLM 配置" })).toBeVisible();
+    await expect(page.getByText("模型角色分工", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("企微提取模型")).toBeVisible();
+
+    await page.goto("/system/maintenance");
+    await expect(page.getByRole("heading", { name: "维护与操作日志" })).toBeVisible();
+    await expect(page.getByText("LLM 本机缓存", { exact: true })).toBeVisible();
+    await expect(page.getByText("正文需在本机目录查看", { exact: false })).toBeVisible();
     expect(externalRequests).toEqual([]);
   });
 });

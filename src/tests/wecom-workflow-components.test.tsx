@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server";
 import WeComCatchPanel from "@/components/wecom/WeComCatchPanel";
 import WeComAutoImportPanel from "@/components/wecom/WeComAutoImportPanel";
 import WeComRollbackPanel from "@/features/system/WeComRollbackPanel";
+import LLMCachePanel from "@/features/system/LLMCachePanel";
 
 describe("wecom workflow components", () => {
   afterEach(() => {
@@ -40,5 +41,16 @@ describe("wecom workflow components", () => {
     expect(html).toContain("企微导入记录与回滚");
     expect(html).toContain("按日期回滚");
     expect(html).toContain("已读未写");
+  });
+
+  it("renders safe LLM cache maintenance controls without calling the API during SSR", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const html = renderToString(<LLMCachePanel />);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(html).toContain("LLM 本机缓存");
+    expect(html).toContain("正文需在本机目录查看");
   });
 });
