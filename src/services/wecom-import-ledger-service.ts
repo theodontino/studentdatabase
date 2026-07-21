@@ -492,6 +492,49 @@ export async function ignoreWeComBatchCandidate(
   return { ignored: true };
 }
 
+export const WECOM_BULK_BATCH_LIMIT = 50;
+
+export async function processWeComBatchesInBulk(
+  prisma: PrismaClient,
+  operationIds: string[],
+  action: "retry" | "reextract" | "ignore",
+) {
+  if (!Array.isArray(operationIds)) throw new Error("批量处理缺少批次列表");
+  const ids = [...new Set(operationIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) throw new Error("批量处理至少需要一个批次");
+  if (ids.length > WECOM_BULK_BATCH_LIMIT) {
+    throw new Error(`批量处理每次最多 ${WECOM_BULK_BATCH_LIMIT} 个批次`);
+  }
+  if (!["retry", "reextract", "ignore"].includes(action)) {
+    throw new Error("批量处理类型不受支持");
+  }
+
+  let succeeded = 0;
+  let failed = 0;
+  let createdCount = 0;
+  for (const id of ids) {
+    try {
+      if (action === "retry") {
+        const result = await retryWeComBatchCandidate(prisma, id);
+        createdCount += result.createdCount;
+      } else if (action === "reextract") {
+        await retryWeComBatchExtraction(prisma, id);
+      } else {
+        await ignoreWeComBatchCandidate(prisma, id);
+      }
+      succeeded += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return {
+    requested: ids.length,
+    succeeded,
+    failed,
+    createdCount,
+  };
+}
+
 export async function pruneWeComRollbackJournal(prisma: PrismaClient) {
   const cutoff = new Date(Date.now() - ROLLBACK_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const retained = await prisma.weComImportRun.findMany({

@@ -7,7 +7,7 @@ import type {
 } from "react";
 import { cx } from "./class-names";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "warning" | "danger";
 type ControlSize = "sm" | "md" | "lg";
 
 export function Button({ className, type = "button", variant = "primary", uiSize = "md", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; uiSize?: ControlSize }) {

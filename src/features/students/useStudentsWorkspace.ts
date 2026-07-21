@@ -18,6 +18,7 @@ const EMPTY_FORM: StudentFormState = {
   gender: "男",
   labelNames: [],
 };
+const STUDENT_PREVIEW_DELAY_MS = 120;
 
 export function useStudentsWorkspace() {
   const router = useRouter();
@@ -118,7 +119,7 @@ export function useStudentsWorkspace() {
     hoverTimer.current = setTimeout(() => {
       showStudentPreview(studentId);
       hoverTimer.current = null;
-    }, 360);
+    }, STUDENT_PREVIEW_DELAY_MS);
   }
 
   function keepStudentPreview() {

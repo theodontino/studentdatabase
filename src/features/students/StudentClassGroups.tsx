@@ -40,7 +40,10 @@ export function StudentClassGroups({ workspace }: { workspace: Workspace }) {
             </span>
             <span data-testid={`student-semester-score-${student.id}`} className="student-list-row__score">
               <span>本学期综合分</span>
-              <strong>{student.semesterSummary?.score100 ?? "—"}{student.semesterSummary?.score100 !== null && student.semesterSummary?.score100 !== undefined && <small>/100</small>}</strong>
+              <strong>
+                <span className="student-list-row__score-current">{student.semesterSummary?.score100 ?? "—"}</span>
+                {student.semesterSummary?.score100 !== null && student.semesterSummary?.score100 !== undefined && <small className="student-list-row__score-maximum">/100</small>}
+              </strong>
               <span>{studentSummaryHint(student.semesterSummary)}</span>
             </span>
           </button>

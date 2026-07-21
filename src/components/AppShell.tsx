@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { IconButton } from "@/components/ui";
 import { applyTeachingContext, readStoredTeachingContext } from "@/features/teaching-context";
+import { useWeComAccess } from "@/features/useWeComAccess";
 
 type NavigationItem = {
   href: string;
@@ -14,7 +15,7 @@ type NavigationItem = {
   context?: "semester" | "full";
 };
 
-const groups: Array<{ label: string; items: NavigationItem[] }> = [
+const baseGroups: Array<{ label: string; items: NavigationItem[] }> = [
   { label: "概览", items: [{ href: "/", label: "仪表盘", icon: "dashboard", context: "semester" }] },
   { label: "教学工作", items: [
     { href: "/feedback", label: "课后工作台", icon: "feedback", context: "full" },
@@ -39,8 +40,18 @@ function isActive(pathname: string, href: string) {
   return pathname.startsWith(href);
 }
 
-function Navigation({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function getNavigationGroups(wecomEnabled: boolean) {
+  if (!wecomEnabled) return baseGroups;
+  return [
+    ...baseGroups.slice(0, 4),
+    { label: "家校工具", items: [{ href: "/wecom", label: "企微家校", icon: "wecom" as const }] },
+    ...baseGroups.slice(4),
+  ];
+}
+
+function Navigation({ pathname, wecomEnabled, onNavigate }: { pathname: string; wecomEnabled: boolean; onNavigate?: () => void }) {
   const router = useRouter();
+  const groups = getNavigationGroups(wecomEnabled);
 
   function navigateWithContext(event: React.MouseEvent<HTMLAnchorElement>, item: NavigationItem) {
     onNavigate?.();
@@ -85,7 +96,9 @@ function Navigation({ pathname, onNavigate }: { pathname: string; onNavigate?: (
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const currentLabel = useMemo(() => groups.flatMap((group) => group.items).find((item) => isActive(pathname, item.href))?.label ?? "Chem-Track AI", [pathname]);
+  const { enabled: wecomEnabled } = useWeComAccess();
+  const groups = useMemo(() => getNavigationGroups(wecomEnabled), [wecomEnabled]);
+  const currentLabel = useMemo(() => groups.flatMap((group) => group.items).find((item) => isActive(pathname, item.href))?.label ?? "Chem-Track AI", [groups, pathname]);
 
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
@@ -104,12 +117,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <a className="app-skip-link" href="#main-content">跳到主要内容</a>
-      <aside className="app-sidebar"><Navigation pathname={pathname} /></aside>
+      <aside className="app-sidebar"><Navigation pathname={pathname} wecomEnabled={wecomEnabled} /></aside>
       <div className="app-mobile-bar">
         <IconButton label="打开导航" onClick={() => setOpen(true)}><AppIcon name="menu" /></IconButton>
         <div><small>Chem-Track AI</small><strong>{currentLabel}</strong></div>
       </div>
-      {open && <div className="app-drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}><aside className="app-drawer" role="dialog" aria-modal="true" aria-label="主导航抽屉"><IconButton autoFocus label="关闭导航" className="app-drawer__close" onClick={() => setOpen(false)}><AppIcon name="close" /></IconButton><Navigation pathname={pathname} onNavigate={() => setOpen(false)} /></aside></div>}
+      {open && <div className="app-drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}><aside className="app-drawer" role="dialog" aria-modal="true" aria-label="主导航抽屉"><IconButton autoFocus label="关闭导航" className="app-drawer__close" onClick={() => setOpen(false)}><AppIcon name="close" /></IconButton><Navigation pathname={pathname} wecomEnabled={wecomEnabled} onNavigate={() => setOpen(false)} /></aside></div>}
       <main id="main-content" className="app-content" tabIndex={-1}><div key={pathname} className="app-route-frame">{children}</div></main>
     </div>
   );

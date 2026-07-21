@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   ignoreWeComBatchCandidate,
+  processWeComBatchesInBulk,
   retryWeComBatchCandidate,
   retryWeComBatchExtraction,
 } from "@/services/wecom-import-ledger-service";
@@ -27,6 +28,8 @@ export async function POST(request: NextRequest) {
       runId?: string;
       operationId?: string;
       batchId?: string;
+      batchIds?: string[];
+      batchAction?: "retry" | "reextract" | "ignore";
       date?: string;
     };
     const result = body.action === "rollback-run"
@@ -37,6 +40,12 @@ export async function POST(request: NextRequest) {
           ? await retryWeComBatchExtraction(prisma, body.batchId || "")
         : body.action === "ignore-batch"
           ? await ignoreWeComBatchCandidate(prisma, body.batchId || "")
+        : body.action === "bulk-batches"
+          ? await processWeComBatchesInBulk(
+            prisma,
+            body.batchIds || [],
+            body.batchAction || "retry",
+          )
       : body.action === "rollback-operation"
       ? await rollbackWeComOperation(prisma, body.operationId || "")
       : body.action === "rollback-date"
@@ -45,7 +54,7 @@ export async function POST(request: NextRequest) {
     if (!result) return NextResponse.json({ error: "不支持的回滚操作" }, { status: 400 });
     return NextResponse.json(result);
   } catch (error) {
-    const message = error instanceof Error && /^(日期|缺少|这个批次|候选学生)/.test(error.message)
+    const message = error instanceof Error && /^(日期|缺少|这个批次|候选学生|批量处理)/.test(error.message)
       ? error.message
       : "企微导入回滚失败，数据库未完成删除";
     return NextResponse.json({ error: message }, { status: 400 });

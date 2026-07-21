@@ -24,6 +24,7 @@ function prepareE2EServerWorkspace(projectRoot: string, rootDir: string) {
     fs.cpSync(path.join(projectRoot, directory), path.join(serverRoot, directory), { recursive: true });
   }
   for (const file of [
+    "LICENSE",
     "package.json",
     "next.config.ts",
     "postcss.config.mjs",
@@ -78,13 +79,14 @@ async function main() {
   const vitestCli = path.join(projectRoot, "node_modules", "vitest", "vitest.mjs");
   const playwrightCli = path.join(projectRoot, "node_modules", "@playwright", "test", "cli.js");
   const command = mode === "playwright" ? playwrightCli : vitestCli;
-  const args = mode === "vitest-run"
+  const baseArgs = mode === "vitest-run"
     ? ["run"]
     : mode === "vitest-watch"
       ? ["--watch"]
       : mode === "vitest-coverage"
         ? ["run", "--coverage"]
         : ["test"];
+  const args = [...baseArgs, ...process.argv.slice(3)];
 
   const child = spawn(process.execPath, [command, ...args], {
     cwd: projectRoot,

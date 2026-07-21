@@ -8,6 +8,8 @@ const items = [
   { href: "/system/configuration", label: "LLM 配置" },
   { href: "/system/integrations", label: "集成与工具" },
   { href: "/system/maintenance", label: "维护与日志" },
+  { href: "/system/about", label: "关于" },
+  { href: "/system/license", label: "开源许可" },
 ];
 
 export default function SystemNav() {

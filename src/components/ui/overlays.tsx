@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useId, useRef } from "react";
+import { createPortal } from "react-dom";
 import { cx } from "./class-names";
 import { Button, IconButton } from "./controls";
 
@@ -34,12 +35,13 @@ function Overlay({ open, title, children, onClose, kind, size = "default" }: { o
     };
   }, [open, onClose]);
   if (!open) return null;
-  return <div className="ui-overlay" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className={cx("ui-overlay__panel", `ui-overlay__panel--${kind}`, size === "wide" && "ui-overlay__panel--wide")}><div className="ui-overlay__header"><h2 id={titleId}>{title}</h2><IconButton label="关闭" onClick={onClose}>×</IconButton></div>{children}</div></div>;
+  const overlay = <div className="ui-overlay" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className={cx("ui-overlay__panel", `ui-overlay__panel--${kind}`, size === "wide" && "ui-overlay__panel--wide")}><div className="ui-overlay__header"><h2 id={titleId}>{title}</h2><IconButton label="关闭" onClick={onClose}>×</IconButton></div>{children}</div></div>;
+  return typeof document === "undefined" ? overlay : createPortal(overlay, document.body);
 }
 
 export function Dialog(props: Omit<Parameters<typeof Overlay>[0], "kind">) { return <Overlay {...props} kind="dialog" />; }
 export function Drawer(props: Omit<Parameters<typeof Overlay>[0], "kind">) { return <Overlay {...props} kind="drawer" />; }
 
-export function ConfirmDialog({ open, title, description, confirmLabel = "确认", cancelLabel = "取消", danger = false, busy = false, onConfirm, onClose }: { open: boolean; title: string; description: ReactNode; confirmLabel?: string; cancelLabel?: string; danger?: boolean; busy?: boolean; onConfirm: () => void; onClose: () => void }) {
-  return <Dialog open={open} title={title} onClose={onClose}><div className="ui-confirm-dialog"><div>{description}</div><div className="ui-confirm-dialog__actions"><Button variant="secondary" onClick={onClose} disabled={busy}>{cancelLabel}</Button><Button variant={danger ? "danger" : "primary"} onClick={onConfirm} disabled={busy}>{busy ? "处理中…" : confirmLabel}</Button></div></div></Dialog>;
+export function ConfirmDialog({ open, title, description, confirmLabel = "确认", cancelLabel = "取消", danger = false, warning = false, busy = false, onConfirm, onClose }: { open: boolean; title: string; description: ReactNode; confirmLabel?: string; cancelLabel?: string; danger?: boolean; warning?: boolean; busy?: boolean; onConfirm: () => void; onClose: () => void }) {
+  return <Dialog open={open} title={title} onClose={onClose}><div className="ui-confirm-dialog"><div>{description}</div><div className="ui-confirm-dialog__actions"><Button variant="secondary" onClick={onClose} disabled={busy}>{cancelLabel}</Button><Button variant={danger ? "danger" : warning ? "warning" : "primary"} onClick={onConfirm} disabled={busy}>{busy ? "处理中…" : confirmLabel}</Button></div></div></Dialog>;
 }

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 import WeComCatchPanel from "@/components/wecom/WeComCatchPanel";
 import WeComAutoImportPanel from "@/components/wecom/WeComAutoImportPanel";
-import WeComRollbackPanel from "@/features/system/WeComRollbackPanel";
+import WeComRollbackPanel from "@/features/wecom/WeComRollbackPanel";
 import LLMCachePanel from "@/features/system/LLMCachePanel";
 
 describe("wecom workflow components", () => {

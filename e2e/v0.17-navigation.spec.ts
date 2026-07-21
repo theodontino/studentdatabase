@@ -24,6 +24,16 @@ test.describe.serial("v0.17.0 information architecture", () => {
     await expect(page.getByRole("heading", { name: "班级日报" })).toBeVisible();
   });
 
+  test("system center exposes consistent about and license pages", async ({ page }) => {
+    await page.goto("/system/about");
+    await expect(page.getByRole("heading", { name: "关于 Chem-Track AI" })).toBeVisible();
+    const licenseTab = page.locator(".system-nav").getByRole("link", { name: "开源许可" });
+    await expect(licenseTab).toBeVisible();
+    await licenseTab.click();
+    await expect(page.getByRole("heading", { name: "开源许可", exact: true })).toBeVisible();
+    await expect(page.locator(".system-license-text")).toContainText("GNU AFFERO GENERAL PUBLIC LICENSE");
+  });
+
   test("daily report uses the shared teaching context", async ({ page }) => {
     await page.route("**/api/report/daily", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ report: "E2E 班级日报：课堂状态稳定。" }) }));
     await page.goto("/daily-report");

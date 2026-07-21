@@ -187,7 +187,7 @@ export default function WeComAutoImportPanel({ onApplied }: WeComAutoImportPanel
             {visibleDetail && <p className="text-xs text-gray-500">{visibleDetail}</p>}
             {active && <div className="flex flex-wrap gap-2 pt-1">
               <Button variant="secondary" uiSize="sm" disabled={controlBusy} onClick={() => setStopMode("stop")}>停止处理</Button>
-              <Button variant="danger" uiSize="sm" disabled={controlBusy} onClick={() => setStopMode("stop_and_rollback")}>停止并回滚本次</Button>
+              <Button variant="warning" uiSize="sm" disabled={controlBusy} onClick={() => setStopMode("stop_and_rollback")}>停止并回滚本次</Button>
             </div>}
           </div>
         )}
@@ -218,7 +218,7 @@ export default function WeComAutoImportPanel({ onApplied }: WeComAutoImportPanel
           ? "系统会等待当前模型调用到达安全点，停止继续写入，建立安全备份后只撤销本次运行产生的增量。"
           : "系统会等待当前模型调用到达安全点后停止；已经成功写入的批次会保留。"}
         confirmLabel={stopMode === "stop_and_rollback" ? "停止并回滚" : "停止处理"}
-        danger={stopMode === "stop_and_rollback"}
+        warning={stopMode === "stop_and_rollback"}
         busy={controlBusy}
         onConfirm={() => void requestStop()}
         onClose={() => setStopMode(null)}

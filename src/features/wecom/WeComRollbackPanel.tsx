@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, ConfirmDialog, EmptyState, Input, Section, StatusBanner } from "@/components/ui";
 import { requestJson } from "@/lib/api-client";
+import { Badge, Button, ConfirmDialog, EmptyState, Input, Section, StatusBanner } from "@/components/ui";
 
 interface AttentionBatch {
   id: string;
@@ -53,7 +53,17 @@ type PendingRollback =
   | { kind: "date"; date: string }
   | { kind: "retry"; id: string; label: string }
   | { kind: "reextract"; id: string; label: string; changeModel: boolean }
-  | { kind: "ignore"; id: string; label: string };
+  | { kind: "ignore"; id: string; label: string }
+  | {
+    kind: "bulk";
+    action: "retry" | "reextract" | "ignore";
+    ids: string[];
+    label: string;
+  };
+
+const INITIAL_VISIBLE_BATCHES = 5;
+const VISIBLE_BATCH_STEP = 20;
+const BULK_BATCH_LIMIT = 50;
 
 const failureLabels: Record<string, string> = {
   protocol_incompatible: "协议不兼容",
@@ -98,6 +108,7 @@ export default function WeComRollbackPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
 
   const load = useCallback(async () => {
     try {
@@ -127,19 +138,27 @@ export default function WeComRollbackPanel() {
           ? { action: "retry-batch", batchId: pending.id }
           : pending.kind === "reextract"
             ? { action: "retry-extraction", batchId: pending.id }
-          : { action: "ignore-batch", batchId: pending.id };
+          : pending.kind === "ignore"
+            ? { action: "ignore-batch", batchId: pending.id }
+            : { action: "bulk-batches", batchAction: pending.action, batchIds: pending.ids };
     try {
       const result = await requestJson<{
         batchCount?: number;
         communicationCount?: number;
         labelCount?: number;
         createdCount?: number;
+        requested?: number;
+        succeeded?: number;
+        failed?: number;
       }>("/api/system/wecom-rollbacks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (pending.kind === "retry") {
+      if (pending.kind === "bulk") {
+        const actionLabel = pending.action === "retry" ? "重新校验" : pending.action === "reextract" ? "重新排队" : "确认忽略";
+        setStatus(`批量${actionLabel}完成：成功 ${result.succeeded ?? 0} 项，保留 ${result.failed ?? 0} 项。`);
+      } else if (pending.kind === "retry") {
         setStatus(`已重新校验，新增 ${result.createdCount ?? 0} 条沟通。`);
       } else if (pending.kind === "reextract") {
         setStatus("失败交流段已重新排队；下次一键导入会使用当前企微提取模型。");
@@ -160,6 +179,7 @@ export default function WeComRollbackPanel() {
   return (
     <>
       <Section
+        className="wecom-rollback-section"
         title="企微导入记录与回滚"
         description={`长期只保存增量变更；最多保留 ${data?.retention.runs ?? 30} 次运行或 ${data?.retention.days ?? 30} 天。真正回滚前会创建校验备份，最多保留 ${data?.retention.safetyBackups ?? 3} 份。`}
       >
@@ -184,7 +204,7 @@ export default function WeComRollbackPanel() {
             <span className="mb-1 block font-medium">按日期回滚</span>
             <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </label>
-          <Button variant="danger" onClick={() => setPending({ kind: "date", date })} disabled={!date || busy}>回滚当天企微导入</Button>
+          <Button variant="warning" onClick={() => setPending({ kind: "date", date })} disabled={!date || busy}>回滚当天企微导入</Button>
         </div>
 
         {status && <StatusBanner tone="success">{status}</StatusBanner>}
@@ -193,44 +213,92 @@ export default function WeComRollbackPanel() {
         {!data || data.runs.length === 0 ? (
           <EmptyState title="暂无企微导入记录" description="完成一次一键导入后会出现在这里。" />
         ) : (
-          <div className="space-y-3">
+          <div className="wecom-rollback-runs">
             {data.runs.map((run) => {
               const label = run.conversations.slice(0, 2).join("、") || "企微导入";
               const canRollback = run.communicationCount > 0 && !["rolled_back", "running"].includes(run.status);
+              const visibleCount = visibleCounts[run.id] ?? INITIAL_VISIBLE_BATCHES;
+              const visibleBatches = run.attentionBatches.slice(0, visibleCount);
+              const retryable = run.attentionBatches.filter((batch) => batch.canRetry);
+              const reextractable = run.attentionBatches.filter((batch) => batch.canReextract);
+              const bulkSelection = (batches: AttentionBatch[]) => batches.slice(0, BULK_BATCH_LIMIT).map((batch) => batch.id);
               return (
-                <div key={run.id} className="rounded-lg border border-gray-200 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <strong className="truncate text-sm text-gray-800">{label}</strong>
+                <article key={run.id} className="wecom-rollback-run">
+                  <header className="wecom-rollback-run__header">
+                    <div className="wecom-rollback-run__identity">
+                      <div className="wecom-rollback-run__title">
+                        <strong>{label}</strong>
                         <Badge tone={run.status === "complete" ? "success" : run.status === "rolled_back" ? "neutral" : "warning"}>
                           {run.status === "complete" ? "可回滚" : run.status === "rolled_back" ? "已回滚" : run.status === "running" ? "运行中" : run.status === "failed" ? "运行失败" : run.status === "cancelled" ? "已停止" : run.status === "interrupted" ? "已中断" : "需要处理"}
                         </Badge>
                       </div>
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p>
                         {new Date(run.startedAt).toLocaleString("zh-CN")}
                         {` · ${run.batchCount} 批 · ${run.messageCount} 条消息 · ${run.communicationCount} 条沟通 · ${run.labelCount} 个标签`}
                       </p>
                     </div>
                     <Button
-                      variant="danger"
+                      variant="warning"
                       uiSize="sm"
                       disabled={!canRollback || busy}
                       onClick={() => setPending({ kind: "run", id: run.id, label })}
                     >回滚这次运行</Button>
-                  </div>
+                  </header>
 
                   {run.attentionBatches.length > 0 && (
-                    <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
-                      {run.attentionBatches.map((batch) => (
-                        <div key={batch.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-amber-50 p-2">
-                          <span className="text-sm text-gray-700">
+                    <div className="wecom-rollback-attention">
+                      <div className="wecom-rollback-attention__summary">
+                        <div>
+                          <strong>{run.attentionBatches.length} 项待处理</strong>
+                          <span>可重新校验 {retryable.length} 项 · 可重新提取 {reextractable.length} 项</span>
+                        </div>
+                        <div className="wecom-rollback-attention__bulk-actions">
+                          {retryable.length > 0 && <Button
+                            variant="secondary"
+                            uiSize="sm"
+                            disabled={busy}
+                            onClick={() => setPending({
+                              kind: "bulk",
+                              action: "retry",
+                              ids: bulkSelection(retryable),
+                              label,
+                            })}
+                          >批量校验 {Math.min(retryable.length, BULK_BATCH_LIMIT)} 项</Button>}
+                          {reextractable.length > 0 && <Button
+                            variant="secondary"
+                            uiSize="sm"
+                            disabled={busy}
+                            onClick={() => setPending({
+                              kind: "bulk",
+                              action: "reextract",
+                              ids: bulkSelection(reextractable),
+                              label,
+                            })}
+                          >批量重新排队 {Math.min(reextractable.length, BULK_BATCH_LIMIT)} 项</Button>}
+                          <Button
+                            variant="ghost"
+                            uiSize="sm"
+                            disabled={busy}
+                            onClick={() => setPending({
+                              kind: "bulk",
+                              action: "ignore",
+                              ids: bulkSelection(run.attentionBatches),
+                              label,
+                            })}
+                          >批量忽略 {Math.min(run.attentionBatches.length, BULK_BATCH_LIMIT)} 项</Button>
+                        </div>
+                      </div>
+                      <p className="wecom-rollback-attention__hint">为避免误操作和瞬时大量调用，每次最多处理 {BULK_BATCH_LIMIT} 项；失败项会保留。</p>
+                      <div className="wecom-rollback-attention__list">
+                      {visibleBatches.map((batch) => (
+                        <div key={batch.id} className="wecom-rollback-batch">
+                          <span className="wecom-rollback-batch__summary">
                             {batch.conversationTitle} · {reasonText(batch)
                               || (batch.status === "needs_review" ? "已读但未写入" : "处理失败")}
                             {` · ${batch.messageCount} 条 · 已尝试 ${batch.attemptCount} 次`}
                           </span>
                           {(batch.modelName || batch.finishReason || batch.completionTokens !== null) && (
-                            <span className="basis-full text-xs text-gray-500">
+                            <span className="wecom-rollback-batch__meta">
                               {[batch.modelName, batch.finishReason && `结束：${batch.finishReason}`,
                                 batch.completionTokens !== null && `输出 token：${batch.completionTokens}`,
                                 batch.reasoningTokens !== null && `推理 token：${batch.reasoningTokens}`,
@@ -238,7 +306,7 @@ export default function WeComRollbackPanel() {
                                 .filter(Boolean).join(" · ")}
                             </span>
                           )}
-                          <div className="flex gap-2">
+                          <div className="wecom-rollback-batch__actions">
                             {batch.canRetry && <Button
                               variant="secondary"
                               uiSize="sm"
@@ -265,9 +333,22 @@ export default function WeComRollbackPanel() {
                           </div>
                         </div>
                       ))}
+                      </div>
+                      {visibleBatches.length < run.attentionBatches.length && <Button
+                        variant="ghost"
+                        uiSize="sm"
+                        disabled={busy}
+                        onClick={() => setVisibleCounts((current) => ({
+                          ...current,
+                          [run.id]: Math.min(
+                            (current[run.id] ?? INITIAL_VISIBLE_BATCHES) + VISIBLE_BATCH_STEP,
+                            run.attentionBatches.length,
+                          ),
+                        }))}
+                      >再显示 {Math.min(VISIBLE_BATCH_STEP, run.attentionBatches.length - visibleBatches.length)} 项（已显示 {visibleBatches.length}/{run.attentionBatches.length}）</Button>}
                     </div>
                   )}
-                </div>
+                </article>
               );
             })}
           </div>
@@ -280,7 +361,11 @@ export default function WeComRollbackPanel() {
           ? "重新校验候选"
           : pending?.kind === "reextract"
             ? pending.changeModel ? "更换模型后重试" : "重新提取失败段"
-            : pending?.kind === "ignore" ? "确认忽略候选" : "确认回滚企微导入"}
+            : pending?.kind === "ignore"
+              ? "确认忽略候选"
+              : pending?.kind === "bulk"
+                ? pending.action === "retry" ? "批量重新校验" : pending.action === "reextract" ? "批量重新排队" : "批量确认忽略"
+                : "确认回滚企微导入"}
         description={pending?.kind === "run"
           ? `将删除“${pending.label}”这次运行新增的沟通；仍被其他批次支持的标签会保留。原始企微聊天不受影响。`
           : pending?.kind === "date"
@@ -289,9 +374,11 @@ export default function WeComRollbackPanel() {
               ? `将重新校验“${pending.label}”，只有全部检查通过才会写入。`
               : pending?.kind === "reextract"
                 ? `将“${pending.label}”重新排队；下次一键导入才会调用当前配置的企微提取模型。`
-              : `将“${pending?.label || ""}”标记为已忽略并删除暂存候选。`}
-        confirmLabel={pending?.kind === "retry" ? "重新校验" : pending?.kind === "reextract" ? "重新排队" : pending?.kind === "ignore" ? "确认忽略" : "确认回滚"}
-        danger={pending?.kind !== "retry" && pending?.kind !== "reextract"}
+              : pending?.kind === "bulk"
+                ? `将对“${pending.label}”的 ${pending.ids.length} 个批次执行${pending.action === "retry" ? "重新校验" : pending.action === "reextract" ? "重新排队" : "确认忽略"}。各批次独立处理，失败项会继续保留。`
+                : `将“${pending?.label || ""}”标记为已忽略并删除暂存候选。`}
+        confirmLabel={pending?.kind === "retry" ? "重新校验" : pending?.kind === "reextract" ? "重新排队" : pending?.kind === "ignore" ? "确认忽略" : pending?.kind === "bulk" ? `处理 ${pending.ids.length} 项` : "确认回滚"}
+        warning={pending?.kind === "ignore" || (pending?.kind === "bulk" && pending.action === "ignore") || pending?.kind === "run" || pending?.kind === "date"}
         busy={busy}
         onConfirm={() => void performAction()}
         onClose={() => setPending(null)}

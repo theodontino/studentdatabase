@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   retryBatch: vi.fn(),
   retryExtraction: vi.fn(),
   ignoreBatch: vi.fn(),
+  bulkBatches: vi.fn(),
 }));
 
 vi.mock("@/services/wecom-rollback-service", () => ({
@@ -21,6 +22,7 @@ vi.mock("@/services/wecom-import-ledger-service", () => ({
   retryWeComBatchCandidate: mocks.retryBatch,
   retryWeComBatchExtraction: mocks.retryExtraction,
   ignoreWeComBatchCandidate: mocks.ignoreBatch,
+  processWeComBatchesInBulk: mocks.bulkBatches,
 }));
 
 import { GET, POST } from "@/app/api/system/wecom-rollbacks/route";
@@ -101,5 +103,28 @@ describe("/api/system/wecom-rollbacks", () => {
     const ignored = await POST(ignore);
     expect(ignored.status).toBe(200);
     expect(await ignored.json()).toEqual({ ignored: true });
+  });
+
+  it("supports bounded bulk review actions", async () => {
+    mocks.bulkBatches.mockResolvedValue({ requested: 2, succeeded: 2, failed: 0, createdCount: 0 });
+    const request = new NextRequest("http://localhost/api/system/wecom-rollbacks", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "bulk-batches",
+        batchAction: "reextract",
+        batchIds: ["batch-1", "batch-2"],
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(mocks.bulkBatches).toHaveBeenCalledWith(
+      expect.anything(),
+      ["batch-1", "batch-2"],
+      "reextract",
+    );
+    expect(await response.json()).toMatchObject({ requested: 2, succeeded: 2, failed: 0 });
   });
 });
