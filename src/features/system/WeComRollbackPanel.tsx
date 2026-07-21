@@ -13,6 +13,7 @@ interface AttentionBatch {
   canReextract: boolean;
   attemptCount: number;
   failureCode: string | null;
+  reviewReasonCodes: string | null;
   modelName: string | null;
   finishReason: string | null;
   promptVersion: string | null;
@@ -31,6 +32,8 @@ interface ImportRun {
   startedAt: string;
   completedAt: string | null;
   rolledBackAt: string | null;
+  cancelRequestedAt: string | null;
+  cancelMode: string | null;
   conversations: string[];
   attentionBatches: AttentionBatch[];
 }
@@ -60,7 +63,28 @@ const failureLabels: Record<string, string> = {
   provider_error: "模型服务错误",
   oversized_message: "超长消息待人工复核",
   batch_failed: "批次处理失败",
+  evidence_mismatch: "原文证据不匹配",
+  candidate_validation_failed: "候选业务校验失败",
+  student_outside_conversation_candidates: "学生不在会话候选范围",
+  matched_student_confidence_not_allowed: "学生匹配置信度不足",
+  missing_source_message_ids: "缺少来源消息",
+  source_message_outside_batch: "消息引用越界",
+  occurred_at_required_for_session: "缺少有效沟通时间",
+  prior_session_not_found: "没有可绑定课次",
+  prior_session_too_distant: "最近课次超过 30 天",
 };
+
+function reasonText(batch: AttentionBatch) {
+  let codes: string[] = [];
+  try {
+    const parsed = JSON.parse(batch.reviewReasonCodes || "[]") as unknown;
+    if (Array.isArray(parsed)) codes = parsed.filter((item): item is string => typeof item === "string");
+  } catch {
+    codes = [];
+  }
+  const primary = batch.failureCode ? [batch.failureCode] : [];
+  return [...new Set([...primary, ...codes])].map((code) => failureLabels[code] || code).join("、");
+}
 
 function localDate() {
   const now = new Date();
@@ -83,7 +107,12 @@ export default function WeComRollbackPanel() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    if (!data?.state?.activeRunId) return;
+    const timer = window.setInterval(() => void load(), 2_000);
+    return () => window.clearInterval(timer);
+  }, [load, data?.state?.activeRunId]);
 
   async function performAction() {
     if (!pending) return;
@@ -167,7 +196,7 @@ export default function WeComRollbackPanel() {
           <div className="space-y-3">
             {data.runs.map((run) => {
               const label = run.conversations.slice(0, 2).join("、") || "企微导入";
-              const canRollback = run.communicationCount > 0 && !["rolled_back", "failed"].includes(run.status);
+              const canRollback = run.communicationCount > 0 && !["rolled_back", "running"].includes(run.status);
               return (
                 <div key={run.id} className="rounded-lg border border-gray-200 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -175,7 +204,7 @@ export default function WeComRollbackPanel() {
                       <div className="flex flex-wrap items-center gap-2">
                         <strong className="truncate text-sm text-gray-800">{label}</strong>
                         <Badge tone={run.status === "complete" ? "success" : run.status === "rolled_back" ? "neutral" : "warning"}>
-                          {run.status === "complete" ? "可回滚" : run.status === "rolled_back" ? "已回滚" : run.status === "failed" ? "运行失败" : "需要处理"}
+                          {run.status === "complete" ? "可回滚" : run.status === "rolled_back" ? "已回滚" : run.status === "running" ? "运行中" : run.status === "failed" ? "运行失败" : run.status === "cancelled" ? "已停止" : run.status === "interrupted" ? "已中断" : "需要处理"}
                         </Badge>
                       </div>
                       <p className="mt-1 text-xs text-gray-500">
@@ -196,9 +225,8 @@ export default function WeComRollbackPanel() {
                       {run.attentionBatches.map((batch) => (
                         <div key={batch.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-amber-50 p-2">
                           <span className="text-sm text-gray-700">
-                            {batch.conversationTitle} · {batch.failureCode
-                              ? failureLabels[batch.failureCode] || batch.failureCode
-                              : batch.status === "needs_review" ? "已读但未写入" : "处理失败"}
+                            {batch.conversationTitle} · {reasonText(batch)
+                              || (batch.status === "needs_review" ? "已读但未写入" : "处理失败")}
                             {` · ${batch.messageCount} 条 · 已尝试 ${batch.attemptCount} 次`}
                           </span>
                           {(batch.modelName || batch.finishReason || batch.completionTokens !== null) && (

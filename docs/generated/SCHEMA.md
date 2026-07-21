@@ -138,6 +138,7 @@ erDiagram
     DATETIME extractedAt
     INTEGER attemptCount
     TEXT failureCode
+    TEXT reviewReasonCodes
     TEXT modelName
     TEXT finishReason
     TEXT promptVersion
@@ -162,6 +163,8 @@ erDiagram
     DATETIME startedAt
     DATETIME completedAt
     DATETIME rolledBackAt
+    DATETIME cancelRequestedAt
+    TEXT cancelMode
   }
   WeComImportState {
     TEXT id PK
@@ -408,6 +411,7 @@ erDiagram
 | `extractedAt` | `DATETIME` | 否 |  |
 | `attemptCount` | `INTEGER` | 是 | default: 0 |
 | `failureCode` | `TEXT` | 否 |  |
+| `reviewReasonCodes` | `TEXT` | 否 |  |
 | `modelName` | `TEXT` | 否 |  |
 | `finishReason` | `TEXT` | 否 |  |
 | `promptVersion` | `TEXT` | 否 |  |
@@ -437,6 +441,8 @@ erDiagram
 | `startedAt` | `DATETIME` | 是 | default: CURRENT_TIMESTAMP |
 | `completedAt` | `DATETIME` | 否 |  |
 | `rolledBackAt` | `DATETIME` | 否 |  |
+| `cancelRequestedAt` | `DATETIME` | 否 |  |
+| `cancelMode` | `TEXT` | 否 |  |
 
 
 ### WeComImportState

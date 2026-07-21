@@ -142,7 +142,7 @@ model WeComImportState {
 
 model WeComImportRun {
   id                 String   @id
-  status             String   // "running" | "complete" | "attention_required" | "failed" | "partially_rolled_back" | "rolled_back"
+  status             String   // running/complete/attention_required/failed/cancelled/interrupted/rolled_back
   windowStartedAt    DateTime
   windowEndedAt      DateTime
   conversationCount  Int      @default(0)
@@ -167,7 +167,7 @@ model WeComImportOperation {
   batchKey           String
   conversationId     String
   conversationTitle  String
-  status             String   // "processing" | "complete" | "needs_review" | "failed" | "ignored" | "rolled_back"
+  status             String   // processing/complete/needs_review/failed/split/cancelled/interrupted/ignored/rolled_back
   messageCount       Int
   candidateStudentIds String   @default("[]")
   communicationCount Int      @default(0)
