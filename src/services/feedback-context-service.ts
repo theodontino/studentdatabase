@@ -113,7 +113,7 @@ function buildPromptContext(input: {
 }
 
 /**
- * Builds deterministic feedback context from existing Chem-Track records.
+ * Builds deterministic feedback context from existing Student Track records.
  * LLM generation may consume the compact promptContext, while UI can render preview.
  */
 export async function buildFeedbackContext(

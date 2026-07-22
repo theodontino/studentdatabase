@@ -14,7 +14,7 @@ import {
 const temporaryDirectories: string[] = [];
 
 function temporaryProject() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chem-track-local-tools-test-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "student-track-local-tools-test-"));
   temporaryDirectories.push(root);
   const cwd = path.join(root, "app");
   const homeDir = path.join(root, "home");

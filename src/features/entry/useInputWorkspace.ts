@@ -39,9 +39,11 @@ export function useInputWorkspace(workflow: AiWorkflowController) {
 
   useEffect(() => {
     if (!workspace.hydrated) return;
-    const draft = sessionStorage.getItem("chem-track:nl-input-draft");
+    const draft = sessionStorage.getItem("student-track:nl-input-draft")
+      ?? sessionStorage.getItem("chem-track:nl-input-draft");
     if (!draft) return;
     setRawText(draft);
+    sessionStorage.removeItem("student-track:nl-input-draft");
     sessionStorage.removeItem("chem-track:nl-input-draft");
   }, [workspace.hydrated]);
 

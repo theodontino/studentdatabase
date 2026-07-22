@@ -7,7 +7,7 @@ export interface PaletteDefinition {
   description: string;
 }
 
-export const PALETTE_STORAGE_KEY = "chem-track:palette";
+export const PALETTE_STORAGE_KEY = "student-track:palette";
 export const DEFAULT_PALETTE: PaletteId = "balanced-nebula";
 
 export const PALETTES: readonly PaletteDefinition[] = [

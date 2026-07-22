@@ -36,7 +36,7 @@ afterEach(async () => {
 
 describe("database backup and restore", () => {
   it("creates, verifies, and restores a consistent snapshot", async () => {
-    testRoot = await mkdtemp(resolve(tmpdir(), "chem-track-backup-"));
+    testRoot = await mkdtemp(resolve(tmpdir(), "student-track-backup-"));
     const databasePath = resolve(testRoot, "live.db");
     const archiveDir = resolve(testRoot, "archives");
     await createTestDatabase(databasePath);
@@ -56,7 +56,7 @@ describe("database backup and restore", () => {
   });
 
   it("rejects a backup whose checksum no longer matches", async () => {
-    testRoot = await mkdtemp(resolve(tmpdir(), "chem-track-backup-"));
+    testRoot = await mkdtemp(resolve(tmpdir(), "student-track-backup-"));
     const databasePath = resolve(testRoot, "live.db");
     const archiveDir = resolve(testRoot, "archives");
     await createTestDatabase(databasePath);

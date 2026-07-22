@@ -11,11 +11,15 @@ export interface DiarizeHotwordFile {
 }
 
 function defaultToolDir() {
-  return process.env.CHEM_TRACK_DIARIZE_TOOL_DIR || path.join(os.homedir(), "tools", "funasr-diarize");
+  return process.env.STUDENT_TRACK_DIARIZE_TOOL_DIR
+    || process.env.CHEM_TRACK_DIARIZE_TOOL_DIR
+    || path.join(os.homedir(), "tools", "funasr-diarize");
 }
 
 function defaultBaseHotwordPath() {
-  return process.env.CHEM_TRACK_BASE_HOTWORDS || path.join(defaultToolDir(), "hotwords_active.txt");
+  return process.env.STUDENT_TRACK_BASE_HOTWORDS
+    || process.env.CHEM_TRACK_BASE_HOTWORDS
+    || path.join(defaultToolDir(), "hotwords_active.txt");
 }
 
 export function normalizeHotwordText(text: string) {

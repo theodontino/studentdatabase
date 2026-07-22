@@ -17,7 +17,7 @@ let tempDir = "";
 const originalDataDir = process.env.DIARIZE_DATA_DIR;
 
 beforeEach(() => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "chem-track-diarize-"));
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "student-track-diarize-"));
   process.env.DIARIZE_DATA_DIR = tempDir;
 });
 

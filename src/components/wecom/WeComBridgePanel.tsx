@@ -46,7 +46,7 @@ export default function WeComBridgePanel({
   return (
     <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">
       <div>
-        <h3 className="font-semibold text-gray-800">生成 Chem-Track 候选 JSON</h3>
+        <h3 className="font-semibold text-gray-800">生成 Student Track 候选 JSON</h3>
         <p className="text-sm text-gray-500 mt-1">
           可粘贴 WeComCatch 导出内容或一段聊天记录，由当前 LLM 配置提取为家校沟通候选。
         </p>

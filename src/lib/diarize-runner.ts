@@ -42,11 +42,11 @@ export async function runDiarizeTask(task: DiarizeTask, emit: Emit): Promise<Dia
     env.FUNASR_HOTWORD = hotwords.path;
     appendDiarizeLog(
       currentTask,
-      `==> Chem Track 热词: ${hotwords.totalCount} 个，其中学生姓名 ${hotwords.studentNameCount} 个\n`,
+      `==> Student Track 热词: ${hotwords.totalCount} 个，其中学生姓名 ${hotwords.studentNameCount} 个\n`,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    appendDiarizeLog(currentTask, `==> Chem Track 热词生成失败，继续转写: ${message}\n`);
+    appendDiarizeLog(currentTask, `==> Student Track 热词生成失败，继续转写: ${message}\n`);
   }
 
   return new Promise((resolve) => {

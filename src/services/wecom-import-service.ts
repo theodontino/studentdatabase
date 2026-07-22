@@ -29,6 +29,8 @@ interface WeComRecord {
   sessionCode?: string | null;
   target?: string | null;
   summary?: string | null;
+  summaryForStudentTrack?: string | null;
+  /** Compatibility with candidate files produced before the Student Track rename. */
   summaryForChemTrack?: string | null;
   feedbackContext?: {
     toneHint?: string | null;
@@ -95,7 +97,7 @@ function isAllowedConfidence(value: unknown, includeMedium: boolean) {
 }
 
 function buildSummary(record: WeComRecord) {
-  const explicit = clean(record.summaryForChemTrack);
+  const explicit = clean(record.summaryForStudentTrack) || clean(record.summaryForChemTrack);
   if (explicit) return explicit;
 
   const occurredAt = clean(record.occurredAt) || "未知";

@@ -1,4 +1,4 @@
-# Chem-Track AI
+# Student Track
 
 高中化学教师 Web 智能学生追踪系统。
 
@@ -9,7 +9,8 @@
 本项目使用 Node.js 24 LTS 和 npm 11，并且只支持本机 `127.0.0.1` 访问。
 
 ```bash
-cd chem-track-ai
+git clone https://github.com/theodontino/student-track.git
+cd student-track
 npm install
 npx prisma migrate deploy # 首次运行及升级执行迁移
 npm run db:seed

@@ -112,7 +112,7 @@ export async function createDatabaseBackup(options: {
 } = {}): Promise<DatabaseBackupResult> {
   const databasePath = resolve(/* turbopackIgnore: true */ options.databasePath ?? resolveDatabasePath());
   const archiveDir = resolve(/* turbopackIgnore: true */ options.archiveDir ?? resolve(/* turbopackIgnore: true */ process.cwd(), "archives"));
-  const prefix = options.prefix ?? "chem-track";
+  const prefix = options.prefix ?? "student-track";
   await mkdir(/* turbopackIgnore: true */ archiveDir, { recursive: true });
 
   const backupPath = resolve(/* turbopackIgnore: true */ archiveDir, `${prefix}_${timestamp()}.db`);

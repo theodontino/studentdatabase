@@ -30,7 +30,7 @@ export default function ExportWorkspace() {
   async function handleExport() {
     setLoading(true); setError(""); setStatus("");
     try {
-      await downloadFile("/api/export", `Chem-Track_${startDate}_${endDate}.xlsx`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ startDate, endDate }) });
+      await downloadFile("/api/export", `Student-Track_${startDate}_${endDate}.xlsx`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ startDate, endDate }) });
       setStatus("Excel 已生成并下载。");
       try { await saveWorkHistory("export", `${startDate} 至 ${endDate} 数据导出`, { startDate, endDate }, `${startDate}:${endDate}`); }
       catch (historyError) { console.error("save export history failed:", historyError); }

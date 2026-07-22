@@ -26,7 +26,7 @@ export default function WeComWorkspace() {
       <StatusBanner tone="warning">该工作区尚未在本机启用。请先阅读第三方工具使用须知。</StatusBanner>
       <WeComAccessPanel />
     </> : <>
-      <StatusBanner tone="info">WeComCatch 为独立第三方本地工具；ChemTrack 不包含其源码和运行数据。云端模型可能接收待提取的会话片段。</StatusBanner>
+      <StatusBanner tone="info">WeComCatch 为独立第三方本地工具；Student Track 不包含其源码和运行数据。云端模型可能接收待提取的会话片段。</StatusBanner>
       <Tabs
         label="企微家校工作区分区"
         value={view}

@@ -21,7 +21,7 @@ export function useWeComAccess() {
   useEffect(() => {
     sync();
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === null || event.key === WECOM_ACCESS_STORAGE_KEY) sync();
+      if (event.key === null || event.key === WECOM_ACCESS_STORAGE_KEY || event.key === "chem-track:wecom-access") sync();
     };
     window.addEventListener("storage", handleStorage);
     window.addEventListener(WECOM_ACCESS_EVENT, sync);

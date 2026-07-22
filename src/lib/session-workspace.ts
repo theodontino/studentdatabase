@@ -1,4 +1,5 @@
-const WORKSPACE_PREFIX = "chem-track:workspace:";
+const WORKSPACE_PREFIX = "student-track:workspace:";
+const LEGACY_WORKSPACE_PREFIX = "chem-track:workspace:";
 
 export interface SessionWorkspaceEnvelope<T> {
   version: number;
@@ -17,7 +18,9 @@ export function readSessionWorkspace<T>(
   validate: (value: unknown) => value is T,
 ): SessionWorkspaceEnvelope<T> | null {
   try {
-    const raw = storage.getItem(sessionWorkspaceKey(key));
+    const currentKey = sessionWorkspaceKey(key);
+    const legacyKey = `${LEGACY_WORKSPACE_PREFIX}${key}`;
+    const raw = storage.getItem(currentKey) ?? storage.getItem(legacyKey);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
@@ -25,6 +28,7 @@ export function readSessionWorkspace<T>(
     if (envelope.version !== version || typeof envelope.savedAt !== "string" || !validate(envelope.value)) {
       return null;
     }
+    if (!storage.getItem(currentKey)) storage.setItem(currentKey, raw);
     return envelope as SessionWorkspaceEnvelope<T>;
   } catch {
     return null;
@@ -53,6 +57,7 @@ export function writeSessionWorkspace<T>(
 export function removeSessionWorkspace(storage: Storage, key: string) {
   try {
     storage.removeItem(sessionWorkspaceKey(key));
+    storage.removeItem(`${LEGACY_WORKSPACE_PREFIX}${key}`);
   } catch {
     // Storage can be unavailable in privacy-restricted browser contexts.
   }

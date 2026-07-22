@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("active WeCom import survives refresh and offers stop-and-rollback", async ({ page }) => {
-  await page.addInitScript(() => window.localStorage.setItem("chem-track:wecom-access", JSON.stringify({
+  await page.addInitScript(() => window.localStorage.setItem("student-track:wecom-access", JSON.stringify({
     version: "wecom-third-party-notice-v1",
     acceptedAt: new Date().toISOString(),
   })));

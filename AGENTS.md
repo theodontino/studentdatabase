@@ -1,4 +1,4 @@
-# Chem-Track AI 开发规则
+# Student Track 开发规则
 
 <!-- BEGIN:nextjs-agent-rules -->
 ## Next.js 本地文档

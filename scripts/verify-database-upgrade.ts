@@ -44,7 +44,7 @@ async function inspect(databasePath: string) {
 async function main() {
   const projectRoot = process.cwd();
   const liveDatabase = resolveDatabasePath();
-  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "chem-track-upgrade-"));
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "student-track-upgrade-"));
   const copiedDatabase = path.join(temporaryDirectory, "upgrade.db");
   try {
     await copyFile(liveDatabase, copiedDatabase);

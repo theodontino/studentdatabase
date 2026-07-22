@@ -1,15 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-# Chem Track project entry for audio diarization/transcription.
+# Student Track project entry for audio diarization/transcription.
 #
 # This wrapper intentionally delegates to the installed diarize toolkit instead
 # of copying credentials, Python runners, or the virtualenv into the app repo.
 # The future Web UI can call this stable project-level entry and persist task
 # metadata under data/diarize/ without depending on the external tool layout.
 
-TOOL_DIR="${CHEM_TRACK_DIARIZE_TOOL_DIR:-$HOME/tools/funasr-diarize}"
-CHEM_TRACK_LOCAL_MODEL="${CHEM_TRACK_LOCAL_MODEL:-iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch}"
+TOOL_DIR="${STUDENT_TRACK_DIARIZE_TOOL_DIR:-${CHEM_TRACK_DIARIZE_TOOL_DIR:-$HOME/tools/funasr-diarize}}"
+STUDENT_TRACK_LOCAL_MODEL="${STUDENT_TRACK_LOCAL_MODEL:-${CHEM_TRACK_LOCAL_MODEL:-iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch}}"
 ENGINE="auto"
 AUDIO_FILE=""
 OUTPUT_DIR=""
@@ -95,13 +95,13 @@ case "$ENGINE" in
 esac
 
 if [ "$ENGINE" = "auto" ] || [ "$ENGINE" = "local" ]; then
-  export FUNASR_MODEL="${FUNASR_MODEL:-$CHEM_TRACK_LOCAL_MODEL}"
+  export FUNASR_MODEL="${FUNASR_MODEL:-$STUDENT_TRACK_LOCAL_MODEL}"
   export FUNASR_TRANSCRIPT_ONLY="${FUNASR_TRANSCRIPT_ONLY:-1}"
 fi
 
 if [ ! -x "$RUNNER" ]; then
   echo "错误: 找不到可执行转写脚本: $RUNNER"
-  echo "可用 CHEM_TRACK_DIARIZE_TOOL_DIR 指向工具目录"
+  echo "可用 STUDENT_TRACK_DIARIZE_TOOL_DIR 指向工具目录"
   exit 1
 fi
 

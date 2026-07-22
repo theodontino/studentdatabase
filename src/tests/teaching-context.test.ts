@@ -35,6 +35,13 @@ describe("teaching context URL", () => {
     expect(hasTeachingContext("?step=review")).toBe(false);
     expect(hasTeachingContext("?step=review&semesterId=sem-2")).toBe(true);
   });
+  it("migrates teaching context saved under the previous product key", () => {
+    const storage = memoryStorage();
+    const context = { semesterId: "sem-old", className: "旧班级", sessionCode: "S01" };
+    storage.setItem("chem-track:teaching-context", JSON.stringify(context));
+    expect(readStoredTeachingContext(storage)).toEqual(context);
+    expect(storage.getItem("student-track:teaching-context")).toBe(JSON.stringify(context));
+  });
   it("isolates page workspaces by the full teaching context", () => {
     const first = teachingContextWorkspaceKey("feedback", { semesterId: "sem-2", className: "高一 A/班", sessionCode: "S04" });
     const second = teachingContextWorkspaceKey("feedback", { semesterId: "sem-2", className: "高一 A/班", sessionCode: "S05" });

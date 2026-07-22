@@ -26,7 +26,7 @@ test.describe.serial("v0.17.0 information architecture", () => {
 
   test("system center exposes consistent about and license pages", async ({ page }) => {
     await page.goto("/system/about");
-    await expect(page.getByRole("heading", { name: "关于 Chem-Track AI" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "关于 Student Track" })).toBeVisible();
     await expect(page.locator(".system-about-hero")).toBeVisible();
     await expect(page.locator(".system-about-card")).toHaveCount(3);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

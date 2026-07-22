@@ -32,7 +32,7 @@ async function collectJsonCandidates(root: string, maxDepth = 4): Promise<Candid
         continue;
       }
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-      if (!entry.name.includes("chemtrack-bridge")) continue;
+      if (!entry.name.includes("student-track-bridge") && !entry.name.includes("chemtrack-bridge")) continue;
       const fileStat = await stat(fullPath);
       results.push({ path: fullPath, modifiedAt: fileStat.mtime.toISOString() });
     }

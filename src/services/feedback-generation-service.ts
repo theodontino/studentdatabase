@@ -153,7 +153,7 @@ export async function generateReviewedFeedback(
 }
 
 export async function generateFeedbackDraft(input: FeedbackDraftInput) {
-  const draftPrompt = `你是 Chem-Track 的内部反馈分析模型。请严格依据以下确定性背景，为${input.studentName}生成一份仅供后续成稿模型使用的内部分析草稿，不要写成给家长直接发送的话术。
+  const draftPrompt = `你是 Student Track 的内部反馈分析模型。请严格依据以下确定性背景，为${input.studentName}生成一份仅供后续成稿模型使用的内部分析草稿，不要写成给家长直接发送的话术。
 
 ${input.promptContext}
 
@@ -171,7 +171,7 @@ export async function reviewFeedbackDraft(input: FeedbackReviewInput): Promise<R
   const forbiddenNames = [...new Set((input.forbiddenStudentNames ?? [])
     .map((name) => name.trim())
     .filter((name) => name && name !== input.studentName))];
-  const reviewPrompt = `你是 Chem-Track 的反馈成稿与审核模型。请先逐项对照“确定性反馈背景”复核内部分析草稿，再把可靠内容改写成可以直接发给家长的话术。内部分析只是辅助材料，不是新的事实来源。
+  const reviewPrompt = `你是 Student Track 的反馈成稿与审核模型。请先逐项对照“确定性反馈背景”复核内部分析草稿，再把可靠内容改写成可以直接发给家长的话术。内部分析只是辅助材料，不是新的事实来源。
 
 确定性反馈背景：
 ${input.promptContext}

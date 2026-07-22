@@ -93,13 +93,15 @@ export function useFeedbackWorkspace(initialStep?: FeedbackStep) {
   useEffect(() => { requestJson<FeedbackStudentOption[]>("/api/students").then(setStudents).catch(() => setStudents([])); }, []);
   useEffect(() => {
     if (!workspace.hydrated) return;
-    const draft = sessionStorage.getItem("chem-track:feedback-draft");
-    const legacyDraft = sessionStorage.getItem("chem-track:nl-input-draft");
+    const draft = sessionStorage.getItem("student-track:feedback-draft")
+      ?? sessionStorage.getItem("chem-track:feedback-draft");
+    const legacyDraft = sessionStorage.getItem("student-track:nl-input-draft")
+      ?? sessionStorage.getItem("chem-track:nl-input-draft");
     if (draft) {
-      setRawText(draft); setParseStatus("已从录音转写载入课后回顾。"); sessionStorage.removeItem("chem-track:feedback-draft");
+      setRawText(draft); setParseStatus("已从录音转写载入课后回顾。"); sessionStorage.removeItem("student-track:feedback-draft"); sessionStorage.removeItem("chem-track:feedback-draft");
       setLegacyDraftAvailable(Boolean(legacyDraft));
     } else if (legacyDraft) {
-      setRawText(legacyDraft); setParseStatus("已载入旧课堂录入草稿。"); sessionStorage.removeItem("chem-track:nl-input-draft");
+      setRawText(legacyDraft); setParseStatus("已载入旧课堂录入草稿。"); sessionStorage.removeItem("student-track:nl-input-draft"); sessionStorage.removeItem("chem-track:nl-input-draft");
       setActiveStep("extract");
     }
   }, [workspace.hydrated]);
@@ -255,10 +257,11 @@ export function useFeedbackWorkspace(initialStep?: FeedbackStep) {
     setContext({ semesterId: state.semesterId, className: state.className, sessionCode: state.sessionCode }); setFeedbackCards(state.students); setFeedbackTotal(state.total); setFeedbackDone(state.total); setFeedbackDirty(false); setForceRegenerate(false); setActiveStep("export"); setContextReloadKey((current) => current + 1); setError(""); setStatus("已恢复历史反馈结果。");
   }
   function restoreLegacyDraft() {
-    const legacyDraft = sessionStorage.getItem("chem-track:nl-input-draft");
+    const legacyDraft = sessionStorage.getItem("student-track:nl-input-draft")
+      ?? sessionStorage.getItem("chem-track:nl-input-draft");
     if (!legacyDraft) { setLegacyDraftAvailable(false); return; }
-    if (rawText.trim()) sessionStorage.setItem("chem-track:feedback-draft", rawText);
-    setRawText(legacyDraft); sessionStorage.removeItem("chem-track:nl-input-draft"); setLegacyDraftAvailable(false);
+    if (rawText.trim()) sessionStorage.setItem("student-track:feedback-draft", rawText);
+    setRawText(legacyDraft); sessionStorage.removeItem("student-track:nl-input-draft"); sessionStorage.removeItem("chem-track:nl-input-draft"); setLegacyDraftAvailable(false);
     setParseStatus("已载入旧课堂录入草稿；原工作台内容已保留为反馈草稿。"); setActiveStep("extract");
   }
   async function generateSingleFeedback() {

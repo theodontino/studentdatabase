@@ -12,10 +12,11 @@ export default function EntryWorkspace() {
   const workflow = useMemo(() => createAiWorkflowController(state.workflow, (action) => dispatch({ type: "workflow", action })), [state.workflow]);
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get("step");
-    const stored = sessionStorage.getItem("chem-track:entry-step");
+    const stored = sessionStorage.getItem("student-track:entry-step")
+      ?? sessionStorage.getItem("chem-track:entry-step");
     const step = fromUrl === "review" || fromUrl === "input" ? fromUrl : stored === "review" ? "review" : "input";
     dispatch({ type: "set-step", step });
   }, []);
-  function setStep(step: EntryStep) { const url = new URL(window.location.href); url.searchParams.set("step", step); window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`); sessionStorage.setItem("chem-track:entry-step", step); dispatch({ type: "set-step", step }); }
+  function setStep(step: EntryStep) { const url = new URL(window.location.href); url.searchParams.set("step", step); window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`); sessionStorage.setItem("student-track:entry-step", step); dispatch({ type: "set-step", step }); }
   return <div className="mx-auto max-w-5xl"><PageHeader title="课堂录入" description="输入课堂记录、解析草案并复核确认，步骤间上下文保持连续。" /><Tabs label="录入步骤" value={state.step} onChange={(value) => setStep(value as EntryStep)} items={[{ value: "input", label: "1 输入与解析" }, { value: "review", label: "2 复核与确认" }]} /><div className="mt-4"><AiWorkflowStatus state={state.workflow} /></div><div className="mt-6">{state.step === "input" ? <InputStep workflow={workflow} onReview={() => setStep("review")} /> : <ReviewStep workflow={workflow} />}</div></div>;
 }

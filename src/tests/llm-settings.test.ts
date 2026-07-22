@@ -22,7 +22,7 @@ const originalEnv = {
 };
 
 beforeEach(() => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "chem-track-llm-settings-"));
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "student-track-llm-settings-"));
   process.env.LLM_SETTINGS_PATH = path.join(tempDir, "settings.json");
   process.env.LLM_API_BASE_URL = "https://env.example/v1";
   process.env.LLM_API_KEY = "env-key";

@@ -33,6 +33,17 @@ describe("session workspace", () => {
     expect(storage.getItem(sessionWorkspaceKey("input"))).toContain('"version":2');
   });
 
+  it("migrates a workspace saved under the previous product key", () => {
+    const storage = memoryStorage();
+    storage.setItem("chem-track:workspace:input", JSON.stringify({
+      version: 2,
+      savedAt: "2026-07-21T00:00:00.000Z",
+      value: { text: "legacy draft", count: 1 },
+    }));
+    expect(readSessionWorkspace(storage, "input", 2, isFixture)?.value.text).toBe("legacy draft");
+    expect(storage.getItem(sessionWorkspaceKey("input"))).toContain("legacy draft");
+  });
+
   it("rejects stale versions, invalid values, and malformed JSON", () => {
     const storage = memoryStorage();
     writeSessionWorkspace(storage, "input", 1, { text: "draft", count: 3 });

@@ -56,7 +56,7 @@ async function compileSchema(): Promise<TableInfo[]> {
     "--script",
   ], { cwd: root, env: { ...process.env, NO_COLOR: "1" }, maxBuffer: 10 * 1024 * 1024 });
 
-  const temporaryRoot = await mkdtemp(resolve(tmpdir(), "chem-track-docs-"));
+  const temporaryRoot = await mkdtemp(resolve(tmpdir(), "student-track-docs-"));
   const databasePath = resolve(temporaryRoot, "schema.db");
   const client = createClient({ url: `file:${databasePath}` });
   try {

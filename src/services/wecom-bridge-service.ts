@@ -52,7 +52,7 @@ interface GenerateWeComBridgeOptions {
   onRetry?: (reason: "network" | "schema") => void;
 }
 
-const legacyBridgeSchema = {
+const candidateBridgeSchema = {
   type: "object",
   additionalProperties: false,
   required: ["source", "mode", "records"],
@@ -66,7 +66,7 @@ const legacyBridgeSchema = {
         additionalProperties: false,
         required: [
           "kind", "source", "matchedStudent", "occurredAt", "sessionCode", "target",
-          "summary", "summaryForChemTrack", "feedbackContext", "attentionSignals", "confidence",
+          "summary", "summaryForStudentTrack", "feedbackContext", "attentionSignals", "confidence",
         ],
         properties: {
           kind: { type: "string", enum: ["communication"] },
@@ -95,7 +95,7 @@ const legacyBridgeSchema = {
           sessionCode: { type: ["string", "null"] },
           target: { type: "string" },
           summary: { type: "string" },
-          summaryForChemTrack: { type: "string" },
+          summaryForStudentTrack: { type: "string" },
           feedbackContext: {
             type: "object",
             additionalProperties: false,
@@ -293,7 +293,7 @@ export function validateWeComBridgeJson(
       || !Array.isArray(source.messageIds)
       || !student
       || typeof student.id !== "string"
-      || typeof record.summaryForChemTrack !== "string"
+      || typeof record.summaryForStudentTrack !== "string"
       || !Array.isArray(record.attentionSignals)
     ) {
       throw new WeComExtractionError("schema_invalid", "LLM 返回的企微记录未通过 Schema 校验");
@@ -340,7 +340,7 @@ async function createStructuredCompletion(
   model: string,
   prompt: string,
   temperature: number,
-  schema: typeof legacyBridgeSchema | typeof groundedBridgeSchema,
+  schema: typeof candidateBridgeSchema | typeof groundedBridgeSchema,
   onRetry?: GenerateWeComBridgeOptions["onRetry"],
 ): Promise<{ response: CompletionResponse; protocol: "json_schema" | "json_object" }> {
   const base = {
@@ -516,7 +516,7 @@ export async function generateWeComBridgeJson(
 
   const grounded = Array.isArray(input.groundedMessages);
   const prompt = grounded
-    ? `你是 Chem-Track 的企微事实提取器。只提取当前连续交流段中能由原文逐字证明、且能唯一绑定学生的长期沟通事实。
+    ? `你是 Student Track 的企微事实提取器。只提取当前连续交流段中能由原文逐字证明、且能唯一绑定学生的长期沟通事实。
 
 学生候选：
 ${JSON.stringify(roster.map((student) => ({ id: student.id, name: student.name, studentId: student.studentId })), null, 2)}
@@ -525,19 +525,19 @@ ${JSON.stringify(roster.map((student) => ({ id: student.id, name: student.name, 
 
 当前连续交流段：
 ${text}`
-    : `你是 Chem-Track 的企微家校沟通提取器。请从当前连续交流段中提取对“课后反馈”有长期价值、且能明确绑定到某个学生的家校沟通信息。
+    : `你是 Student Track 的企微家校沟通提取器。请从当前连续交流段中提取对“课后反馈”有长期价值、且能明确绑定到某个学生的家校沟通信息。
 
 学生名单：
 ${JSON.stringify(roster, null, 2)}
 
-输出必须严格符合提供的 JSON Schema。只生成 kind=communication 的记录；没有有价值的新事实时 records 返回空数组。不能明确匹配唯一学生时 confidence 填 low，不得臆测。没有明确课次时 sessionCode 填 null。summaryForChemTrack 保留家长关注点、学生状态、后续反馈口径或行动建议。attentionSignals 只根据明确文字事实识别 academic-performance、learning-confidence、parent-concern、withdrawal-intent，没有时返回空数组。输入提供的会话 ID 和消息 ID 必须照抄，messageIds 只包含支撑记录的输入消息 ID。只是重复 recentCommunications 且没有新事实、新变化或新行动时不生成记录。
+输出必须严格符合提供的 JSON Schema。只生成 kind=communication 的记录；没有有价值的新事实时 records 返回空数组。不能明确匹配唯一学生时 confidence 填 low，不得臆测。没有明确课次时 sessionCode 填 null。summaryForStudentTrack 保留家长关注点、学生状态、后续反馈口径或行动建议。attentionSignals 只根据明确文字事实识别 academic-performance、learning-confidence、parent-concern、withdrawal-intent，没有时返回空数组。输入提供的会话 ID 和消息 ID 必须照抄，messageIds 只包含支撑记录的输入消息 ID。只是重复 recentCommunications 且没有新事实、新变化或新行动时不生成记录。
 
 当前连续交流段：
 ${text}`;
 
   const client = createLLMClient("wecomExtraction");
   const model = getLLMModel("wecomExtraction");
-  const schema = grounded ? groundedBridgeSchema : legacyBridgeSchema;
+  const schema = grounded ? groundedBridgeSchema : candidateBridgeSchema;
   const first = await createStructuredCompletion(client, model, prompt, 0.1, schema, options.onRetry);
   try {
     return {

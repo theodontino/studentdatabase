@@ -52,4 +52,15 @@ describe("WeCom third-party notice access", () => {
       vi.useRealTimers();
     }
   });
+
+  it("recognizes an acknowledgement saved under the previous product key", () => {
+    const storage = memoryStorage();
+    storage.setItem("chem-track:wecom-access", JSON.stringify({
+      version: WECOM_ACCESS_NOTICE_VERSION,
+      acceptedAt: "2026-07-21T12:00:00.000Z",
+    }));
+    expect(hasAcceptedWeComNotice(storage)).toBe(true);
+    writeWeComNoticeAcceptance(storage, false);
+    expect(storage.getItem("chem-track:wecom-access")).toBeNull();
+  });
 });

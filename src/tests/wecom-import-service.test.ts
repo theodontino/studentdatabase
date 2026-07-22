@@ -125,7 +125,7 @@ describe("wecom import service", () => {
         confidence: "high",
       },
       target: "家长",
-      summaryForChemTrack: "同一批内的相同摘要",
+      summaryForStudentTrack: "同一批内的相同摘要",
     };
     const result = await planWeComCommunicationImport(prisma, {
       jsonText: JSON.stringify({ records: [
@@ -135,5 +135,23 @@ describe("wecom import service", () => {
     });
 
     expect(result).toMatchObject({ importableCount: 2, createCount: 1, duplicateCount: 1 });
+  });
+
+  it("reads the previous candidate summary field during the rename transition", async () => {
+    const student = await prisma.student.findFirst({
+      select: { id: true, name: true, studentId: true },
+      orderBy: { studentId: "asc" },
+    });
+    expect(student).toBeTruthy();
+    const result = await planWeComCommunicationImport(prisma, {
+      jsonText: JSON.stringify({ records: [{
+        kind: "communication",
+        source: { conversationId: "legacy-brand-field", conversationTitle: `${student!.name}家长` },
+        matchedStudent: { ...student, confidence: "high" },
+        target: "家长",
+        summaryForChemTrack: "旧候选文件仍可导入",
+      }] }),
+    });
+    expect(result.plans[0]?.summary).toBe("旧候选文件仍可导入");
   });
 });

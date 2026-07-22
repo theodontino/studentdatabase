@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const TEST_TEMP_PREFIX = "chem-track-ai-test-";
+export const TEST_TEMP_PREFIX = "student-track-test-";
 
 export interface IsolatedTestEnvironment {
   rootDir: string;

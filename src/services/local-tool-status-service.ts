@@ -65,7 +65,12 @@ export function resolveFunASRPaths(options: LocalToolStatusOptions = {}): Resolv
   const env = options.env ?? process.env;
   const homeDir = options.homeDir ?? os.homedir();
   const defaultToolDir = path.join(homeDir, "tools", "funasr-diarize");
-  const toolDir = resolveOverride(env.CHEM_TRACK_DIARIZE_TOOL_DIR, defaultToolDir, cwd, homeDir);
+  const toolDir = resolveOverride(
+    env.STUDENT_TRACK_DIARIZE_TOOL_DIR ?? env.CHEM_TRACK_DIARIZE_TOOL_DIR,
+    defaultToolDir,
+    cwd,
+    homeDir,
+  );
   const defaultVenv = path.join(homeDir, "tools", "funasr-diarize", "venv");
 
   return {
@@ -77,7 +82,7 @@ export function resolveFunASRPaths(options: LocalToolStatusOptions = {}): Resolv
     aliyunRunner: path.join(toolDir, "diarize_aliyun.sh"),
     venvPython: path.join(resolveOverride(env.FUNASR_VENV, defaultVenv, cwd, homeDir), "bin", "python"),
     hotwords: resolveOverride(
-      env.CHEM_TRACK_BASE_HOTWORDS,
+      env.STUDENT_TRACK_BASE_HOTWORDS ?? env.CHEM_TRACK_BASE_HOTWORDS,
       path.join(toolDir, "hotwords_active.txt"),
       cwd,
       homeDir,
@@ -357,7 +362,7 @@ export function inspectWeComCatch(options: LocalToolStatusOptions = {}): LocalTo
     status,
     summary: summaryFor(status),
     checks,
-    notice: "WeComCatch 是仓库外的可选本地工具；Chem-Track 不包含或分发其源码和运行数据。",
+    notice: "WeComCatch 是仓库外的可选本地工具；Student Track 不包含或分发其源码和运行数据。",
   };
 }
 

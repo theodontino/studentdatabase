@@ -353,7 +353,7 @@ export function decorateGroundedWeComRecords(records: unknown[], batch: Extracti
       sessionCode: null,
       target: "家长",
       summary: String(record.factualSummary || ""),
-      summaryForChemTrack: String(record.factualSummary || ""),
+      summaryForStudentTrack: String(record.factualSummary || ""),
       feedbackContext: { toneHint: "", nextAction: "" },
       attentionSignals: [],
       confidence: record.confidence,

@@ -69,9 +69,9 @@ function Navigation({ pathname, wecomEnabled, onNavigate }: { pathname: string; 
 
   return (
     <>
-      <div className="app-brand" aria-label="Chem-Track AI">
-        <span className="app-brand__mark" aria-hidden="true">CT</span>
-        <div><strong>Chem-Track AI</strong><small>化学学生追踪系统</small></div>
+      <div className="app-brand" aria-label="Student Track">
+        <span className="app-brand__mark" aria-hidden="true">ST</span>
+        <div><strong>Student Track</strong><small>化学学生追踪系统</small></div>
       </div>
       <nav className="app-nav" aria-label="主导航">
         {groups.map((group) => (
@@ -87,7 +87,7 @@ function Navigation({ pathname, wecomEnabled, onNavigate }: { pathname: string; 
       <div className="app-sidebar__footer">
         <span>工作状态保留在当前标签页</span>
         <span>本机单教师工作区</span>
-        <a href="https://github.com/theodontino/studentdatabase" target="_blank" rel="noreferrer">源代码 · AGPL-3.0</a>
+        <a href="https://github.com/theodontino/student-track" target="_blank" rel="noreferrer">源代码 · AGPL-3.0</a>
       </div>
     </>
   );
@@ -98,7 +98,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const { enabled: wecomEnabled } = useWeComAccess();
   const groups = useMemo(() => getNavigationGroups(wecomEnabled), [wecomEnabled]);
-  const currentLabel = useMemo(() => groups.flatMap((group) => group.items).find((item) => isActive(pathname, item.href))?.label ?? "Chem-Track AI", [groups, pathname]);
+  const currentLabel = useMemo(() => groups.flatMap((group) => group.items).find((item) => isActive(pathname, item.href))?.label ?? "Student Track", [groups, pathname]);
 
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
@@ -120,7 +120,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="app-sidebar"><Navigation pathname={pathname} wecomEnabled={wecomEnabled} /></aside>
       <div className="app-mobile-bar">
         <IconButton label="打开导航" onClick={() => setOpen(true)}><AppIcon name="menu" /></IconButton>
-        <div><small>Chem-Track AI</small><strong>{currentLabel}</strong></div>
+        <div><small>Student Track</small><strong>{currentLabel}</strong></div>
       </div>
       {open && <div className="app-drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}><aside className="app-drawer" role="dialog" aria-modal="true" aria-label="主导航抽屉"><IconButton autoFocus label="关闭导航" className="app-drawer__close" onClick={() => setOpen(false)}><AppIcon name="close" /></IconButton><Navigation pathname={pathname} wecomEnabled={wecomEnabled} onNavigate={() => setOpen(false)} /></aside></div>}
       <main id="main-content" className="app-content" tabIndex={-1}><div key={pathname} className="app-route-frame">{children}</div></main>

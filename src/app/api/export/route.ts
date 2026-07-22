@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse(buf, {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="Chem-Track_${startDate}_${endDate}.xlsx"`,
+        "Content-Disposition": `attachment; filename="Student-Track_${startDate}_${endDate}.xlsx"`,
       },
     });
   } catch (error) {

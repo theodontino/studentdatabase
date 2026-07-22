@@ -1,7 +1,8 @@
 import type { TeachingContext } from "./types";
 
 export const emptyTeachingContext: TeachingContext = { semesterId: "", className: "", sessionCode: "" };
-export const TEACHING_CONTEXT_STORAGE_KEY = "chem-track:teaching-context";
+export const TEACHING_CONTEXT_STORAGE_KEY = "student-track:teaching-context";
+const LEGACY_TEACHING_CONTEXT_STORAGE_KEY = "chem-track:teaching-context";
 
 export function isTeachingContext(value: unknown): value is TeachingContext {
   if (!value || typeof value !== "object") return false;
@@ -33,10 +34,13 @@ export function hasTeachingContext(search: string) {
 
 export function readStoredTeachingContext(storage: Storage): TeachingContext | null {
   try {
-    const raw = storage.getItem(TEACHING_CONTEXT_STORAGE_KEY);
+    const raw = storage.getItem(TEACHING_CONTEXT_STORAGE_KEY)
+      ?? storage.getItem(LEGACY_TEACHING_CONTEXT_STORAGE_KEY);
     if (!raw) return null;
     const value: unknown = JSON.parse(raw);
-    return isTeachingContext(value) ? value : null;
+    if (!isTeachingContext(value)) return null;
+    storage.setItem(TEACHING_CONTEXT_STORAGE_KEY, raw);
+    return value;
   } catch {
     return null;
   }
